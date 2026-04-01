@@ -1262,6 +1262,14 @@ body {
   width: 100%;
 }
 
+.att-save-bar {
+  padding: 10px 0 4px;
+}
+
+.att-save-bar .btn {
+  width: 100%;
+}
+
 /* 테스트 패널 */
 .test-student-row {
   display: flex;
@@ -1318,6 +1326,7 @@ body {
 .att-student-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
@@ -1325,6 +1334,34 @@ body {
 
 .att-student-row:last-child {
   border-bottom: none;
+}
+
+.student-memo-wrap {
+  flex-basis: 100%;
+  margin-top: -2px;
+}
+
+.student-memo-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text2);
+  font-size: 12px;
+  font-family: 'Noto Sans KR', sans-serif;
+  padding: 4px 2px;
+  outline: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.student-memo-input::placeholder {
+  color: var(--text3);
+}
+
+.student-memo-input:focus {
+  border-bottom-color: var(--accent);
+  color: var(--text);
 }
 
 .att-avatar {

@@ -7,9 +7,11 @@ import {
   getAttendance,
   getClassMemo,
   getTestScores,
+  getStudentMemos,
   upsertAttendance,
   upsertClassMemo,
   upsertTestScore,
+  upsertStudentMemo,
 } from '../api.js'
 import { showToast } from '../components/toast.js'
 import { isOnline } from '../lib/supabase.js'
@@ -19,6 +21,7 @@ let allClasses = []
 let attendanceCache = {}   // classId → { studentId → {status, homework_pct} }
 let memoCache = {}         // classId → memo string
 let testScoreCache = {}    // classId → { studentId → score }
+let studentMemoCache = {}  // classId → { studentId → memo string }
 let calendarVisible = false
 let attSearchQuery = ''
 
@@ -159,6 +162,7 @@ async function loadAttendanceData() {
   attendanceCache = {}
   memoCache = {}
   testScoreCache = {}
+  studentMemoCache = {}
 
   allClasses = await getClasses()
 
@@ -329,6 +333,11 @@ function accordionHTML(cls) {
           <div id="student-rows-${cls.id}">
             ${renderStudentRows(cls)}
           </div>
+
+          <!-- 출결 저장 버튼 -->
+          <div class="att-save-bar" id="att-save-bar-${cls.id}">
+            <button class="btn btn-primary btn-sm" id="att-save-${cls.id}">저장</button>
+          </div>
         </div>
       </div>
     </div>
@@ -349,6 +358,7 @@ function renderStudentRows(cls) {
     const avatarClass = student.gender === '남' ? 'male' : 'female'
     const hwColor = hw >= 80 ? 'var(--green)' : hw >= 50 ? 'var(--yellow)' : hw > 0 ? 'var(--red)' : 'var(--border)'
 
+    const memoVal = studentMemoCache[cls.id]?.[sid] || ''
     return `
       <div class="att-student-row" data-student-id="${sid}" data-class-id="${cls.id}">
         <div class="att-avatar ${avatarClass}">${student.name.charAt(0)}</div>
@@ -370,6 +380,14 @@ function renderStudentRows(cls) {
             value="${hw}"
             style="background: linear-gradient(to right, ${hwColor} ${hw}%, var(--border) ${hw}%)"
             id="hw-slider-${cls.id}-${sid}"
+            data-class-id="${cls.id}"
+            data-student-id="${sid}" />
+        </div>
+        <div class="student-memo-wrap">
+          <input class="student-memo-input" type="text"
+            id="smemo-${cls.id}-${sid}"
+            placeholder="개인 메모..."
+            value="${escapeHtml(memoVal)}"
             data-class-id="${cls.id}"
             data-student-id="${sid}" />
         </div>
@@ -432,6 +450,15 @@ async function loadPanelData(classId) {
       gradeEl.textContent = g
       gradeEl.className = `score-grade ${g}`
     }
+  })
+
+  // 학생 메모 로드
+  const studentMemos = await getStudentMemos(currentDate, classId)
+  if (!studentMemoCache[classId]) studentMemoCache[classId] = {}
+  studentMemos.forEach(r => {
+    studentMemoCache[classId][r.student_id] = r.memo || ''
+    const ta = document.getElementById(`smemo-${classId}-${r.student_id}`)
+    if (ta) ta.value = r.memo || ''
   })
 }
 
@@ -555,39 +582,29 @@ function bindClassAccordion(cls) {
     }
   }
 
-  // 출결 버튼
+  // 출결 버튼 — 로컬 상태만 업데이트 (저장 버튼으로 저장)
   item.querySelectorAll('.att-btn').forEach(btn => {
-    btn.onclick = async (e) => {
+    btn.onclick = (e) => {
       e.stopPropagation()
       const row = btn.closest('.att-student-row')
       const sid = row.dataset.studentId
       const cid = row.dataset.classId
       const status = btn.dataset.status
 
-      // 토글
       const currentStatus = attendanceCache[cid]?.[sid]?.status
       const newStatus = currentStatus === status ? '' : status
 
-      // UI 즉시 반영
       row.querySelectorAll('.att-btn').forEach(b => b.classList.remove('active'))
       if (newStatus) btn.classList.add('active')
 
       if (!attendanceCache[cid]) attendanceCache[cid] = {}
-      attendanceCache[cid][sid] = {
-        ...attendanceCache[cid][sid],
-        status: newStatus,
-      }
+      attendanceCache[cid][sid] = { ...attendanceCache[cid][sid], status: newStatus }
 
-      try {
-        await upsertAttendance(currentDate, cid, sid, { status: newStatus })
-        updateSummaryPill(cid)
-      } catch (err) {
-        showToast('저장 실패', 'error')
-      }
+      updateSummaryPill(cid)
     }
   })
 
-  // 과제 슬라이더
+  // 과제 슬라이더 — 로컬 상태만 업데이트 (저장 버튼으로 저장)
   item.querySelectorAll('.homework-slider').forEach(slider => {
     slider.addEventListener('input', (e) => {
       e.stopPropagation()
@@ -598,32 +615,48 @@ function bindClassAccordion(cls) {
       if (valEl) valEl.textContent = val + '%'
       const color = val >= 80 ? 'var(--green)' : val >= 50 ? 'var(--yellow)' : val > 0 ? 'var(--red)' : 'var(--border)'
       slider.style.background = `linear-gradient(to right, ${color} ${val}%, var(--border) ${val}%)`
-    })
-
-    slider.addEventListener('change', async (e) => {
-      e.stopPropagation()
-      const cid = slider.dataset.classId
-      const sid = slider.dataset.studentId
-      const val = parseInt(slider.value)
-
       if (!attendanceCache[cid]) attendanceCache[cid] = {}
-      attendanceCache[cid][sid] = {
-        ...attendanceCache[cid][sid],
-        homework_pct: val,
-      }
-
-      try {
-        await upsertAttendance(currentDate, cid, sid, {
-          homework_pct: val,
-          status: attendanceCache[cid][sid]?.status || '',
-        })
-      } catch (err) {
-        showToast('저장 실패', 'error')
-      }
+      attendanceCache[cid][sid] = { ...attendanceCache[cid][sid], homework_pct: val }
     })
 
     slider.addEventListener('click', (e) => e.stopPropagation())
   })
+
+  // 학생 개인 메모 — 클릭 버블링 방지 (저장 버튼으로 저장)
+  item.querySelectorAll('.student-memo-input').forEach(input => {
+    input.addEventListener('click', (e) => e.stopPropagation())
+  })
+
+  // 출결 저장 버튼
+  const attSaveBtn = document.getElementById(`att-save-${classId}`)
+  if (attSaveBtn) {
+    attSaveBtn.onclick = async (e) => {
+      e.stopPropagation()
+      attSaveBtn.disabled = true
+      attSaveBtn.textContent = '저장 중...'
+      try {
+        const students = cls.students || []
+        for (const s of students) {
+          const sid = typeof s === 'object' ? s.id : s
+          const cached = attendanceCache[classId]?.[sid] || {}
+          await upsertAttendance(currentDate, classId, sid, {
+            status: cached.status || '',
+            homework_pct: cached.homework_pct ?? 0,
+          })
+          const memoInput = document.getElementById(`smemo-${classId}-${sid}`)
+          if (memoInput) {
+            await upsertStudentMemo(currentDate, classId, sid, memoInput.value.trim())
+          }
+        }
+        showToast('출결이 저장되었습니다', 'success')
+      } catch (err) {
+        showToast('저장 실패', 'error')
+      } finally {
+        attSaveBtn.disabled = false
+        attSaveBtn.textContent = '저장'
+      }
+    }
+  }
 }
 
 function updateSummaryPill(classId) {
