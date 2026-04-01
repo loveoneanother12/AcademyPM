@@ -8,6 +8,7 @@ import {
   getAttendance,
   getClassMemo,
   getTestScores,
+  getStudentMemos,
   getStudents,
 } from '../api.js'
 import { isOnline } from '../lib/supabase.js'
@@ -159,11 +160,15 @@ async function loadResults() {
     getAttendance(currentDate),
   ])
 
-  // 출석 데이터 있는 수업만 표시 (없으면 전체)
+  // 선택된 요일의 수업만 필터
+  const dow = DAY_LABELS[new Date(currentDate + 'T00:00:00').getDay()]
+  const dayClasses = classes.filter(cls => (cls.days || []).includes(dow))
+
+  // 출석 데이터 있는 수업만 표시 (없으면 해당 요일 전체)
   const attClassIds = new Set(attRows.map(r => r.class_id))
   const displayClasses = attClassIds.size > 0
-    ? classes.filter(c => attClassIds.has(c.id))
-    : classes
+    ? dayClasses.filter(c => attClassIds.has(c.id))
+    : dayClasses
 
   if (displayClasses.length === 0) {
     cachedClassDataList = []
@@ -179,12 +184,13 @@ async function loadResults() {
 
   cachedClassDataList = await Promise.all(
     displayClasses.map(async cls => {
-      const [memo, scores] = await Promise.all([
+      const [memo, scores, studentMemos] = await Promise.all([
         getClassMemo(currentDate, cls.id),
         getTestScores(currentDate, cls.id),
+        getStudentMemos(currentDate, cls.id),
       ])
       const clsAtt = attRows.filter(r => r.class_id === cls.id)
-      return { cls, memo, scores, att: clsAtt, students }
+      return { cls, memo, scores, att: clsAtt, students, studentMemos }
     })
   )
 
@@ -216,11 +222,14 @@ function renderResultsContent() {
     return
   }
 
-  content.innerHTML = filtered.map(({ cls, memo, scores, att, students }) => {
+  content.innerHTML = filtered.map(({ cls, memo, scores, att, students, studentMemos }) => {
     const clsStudents = cls.students || []
 
     const attMap = {}
     att.forEach(r => { attMap[r.student_id] = r })
+
+    const studentMemoMap = {}
+    ;(studentMemos || []).forEach(r => { if (r.memo) studentMemoMap[r.student_id] = r.memo })
 
     const statusLabel = { present: '출석', late: '지각', absent: '결석' }
     const statusColor = { present: 'var(--green)', late: 'var(--yellow)', absent: 'var(--red)' }
@@ -233,7 +242,7 @@ function renderResultsContent() {
       <div class="results-summary-card">
         <div class="results-class-header">
           <div class="results-class-name">${cls.name}</div>
-          <div style="display:flex;align-items:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             <span class="subject-tag ${cls.subject || ''}" style="font-size:10px">${cls.subject || ''}</span>
             <div class="attendance-summary-pill">
               <span class="att-present">${presentCount}출</span>
@@ -254,6 +263,7 @@ function renderResultsContent() {
             const r = attMap[sid]
             const status = r?.status || ''
             const hw = r?.homework_pct ?? '-'
+            const studentMemo = studentMemoMap[sid] || ''
             return `
               <div class="results-att-row">
                 <span class="results-att-name">${student.name}</span>
@@ -262,6 +272,7 @@ function renderResultsContent() {
                 </span>
                 <span class="results-att-hw">과제 ${hw !== '-' ? hw + '%' : '-'}</span>
               </div>
+              ${studentMemo ? `<div class="results-student-memo">${studentMemo}</div>` : ''}
             `
           }).join('')}
         ` : ''}

@@ -29,6 +29,7 @@ create table if not exists classes (
   time         text,          -- '20-22' 형식
   days         text[],        -- '{월,수,금}' 배열
   detail_memo  text,          -- 수업 상세 메모 (교재, 진도 등)
+  is_clinic    boolean default false,  -- 클리닉 수업 여부
   created_at   timestamp with time zone default now()
 );
 
@@ -48,6 +49,7 @@ create table if not exists attendance (
   student_id    uuid references students(id) on delete cascade,
   status        text,            -- 'present' | 'late' | 'absent'
   homework_pct  integer default 0,  -- 0~100
+  is_na         boolean default false,  -- 클리닉 수업에서 해당없음 처리
   unique(date, class_id, student_id)
 );
 
@@ -106,3 +108,10 @@ create index if not exists idx_class_memos_date on class_memos(date);
 create index if not exists idx_student_memos_student on student_memos(student_id);
 create index if not exists idx_class_students_class on class_students(class_id);
 create index if not exists idx_class_students_student on class_students(student_id);
+
+-- ============================================================
+-- 마이그레이션 (기존 DB에 컬럼 추가 시 실행)
+-- ============================================================
+
+alter table classes    add column if not exists is_clinic boolean default false;
+alter table attendance add column if not exists is_na     boolean default false;

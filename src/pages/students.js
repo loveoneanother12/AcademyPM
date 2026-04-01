@@ -10,6 +10,7 @@ import {
   deleteRow,
   getStudentAttendance,
   getStudentTestScores,
+  getStudentMemos,
 } from '../api.js'
 import { openModal, closeModal } from '../components/modal.js'
 import { showToast } from '../components/toast.js'
@@ -19,7 +20,7 @@ let allStudents = []
 let searchQuery = ''
 
 const SUBJECTS = ['수학', '영어', '국어', '과학']
-const GRADES = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3']
+const GRADES = ['중1', '중2', '중3', '고1', '고2', '고3']
 
 export async function renderStudentsPage(container) {
   container.innerHTML = `
@@ -170,10 +171,11 @@ async function openStudentDetailModal(student) {
     return d.toLocaleDateString('sv-KR')
   })()
 
-  const [classes, attendanceData, testScoreData] = await Promise.all([
+  const [classes, attendanceData, testScoreData, studentMemoData] = await Promise.all([
     getClasses(),
     getStudentAttendance(student.id),
     getStudentTestScores(student.id),
+    getStudentMemos(null, null, student.id),
   ])
 
   // 이 학생이 수강 중인 수업만
@@ -183,7 +185,7 @@ async function openStudentDetailModal(student) {
 
   // 수업별 데이터 계산
   const classDataList = myClasses.map(cls => {
-    const clsAtt = attendanceData.filter(r => r.class_id === cls.id && r.date >= fourWeeksAgo && r.date <= today)
+    const clsAtt = attendanceData.filter(r => r.class_id === cls.id && r.date >= fourWeeksAgo && r.date <= today && !r.is_na)
     const presentCount = clsAtt.filter(r => r.status === 'present').length
     const lateCount = clsAtt.filter(r => r.status === 'late').length
     const absentCount = clsAtt.filter(r => r.status === 'absent').length
@@ -199,7 +201,11 @@ async function openStudentDetailModal(student) {
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-5)
 
-    return { cls, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores }
+    const clsMemos = studentMemoData
+      .filter(r => r.class_id === cls.id && r.date >= fourWeeksAgo && r.date <= today && r.memo)
+      .sort((a, b) => b.date.localeCompare(a.date))
+
+    return { cls, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores, clsMemos }
   })
 
   const subjects = student.subjects || []
@@ -229,7 +235,7 @@ async function openStudentDetailModal(student) {
   `
 
   const classBoxes = classDataList.length > 0
-    ? classDataList.map(({ cls, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores }, idx) => {
+    ? classDataList.map(({ cls, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores, clsMemos }, idx) => {
         const days = (cls.days || []).join(', ')
         const meta = [days, cls.time].filter(Boolean).join(' · ')
         const hwColor = hwAvg === null ? 'var(--text3)' : hwAvg >= 80 ? 'var(--green)' : hwAvg >= 50 ? 'var(--yellow)' : 'var(--red)'
@@ -273,8 +279,20 @@ async function openStudentDetailModal(student) {
             </div>
             ${clsScores.length > 0 ? `
               <div style="font-size:11px;color:var(--text3);margin-bottom:6px">최근 ${clsScores.length}회 테스트</div>
-              <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px">
+              <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px">
                 ${scoreChartSVG(clsScores)}
+              </div>
+            ` : ''}
+
+            ${clsMemos.length > 0 ? `
+              <div style="font-size:11px;color:var(--text3);margin-top:10px;margin-bottom:6px">4주 개인 메모</div>
+              <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px">
+                ${clsMemos.map(m => `
+                  <div style="display:flex;flex-direction:column;gap:2px">
+                    <span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${m.date}</span>
+                    <span style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${m.memo}</span>
+                  </div>
+                `).join('<div style="height:1px;background:var(--border)"></div>')}
               </div>
             ` : ''}
           </div>

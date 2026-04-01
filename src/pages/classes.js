@@ -19,6 +19,10 @@ let allClasses = []
 let allStudents = []
 let searchQuery = ''
 
+function escapeHtml(str) {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 const SUBJECTS = ['수학', '영어', '국어', '과학']
 const GRADES = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3']
 const DAYS = ['월', '화', '수', '목', '금', '토', '일']
@@ -144,6 +148,7 @@ async function openClassDetailModal(cls) {
           <span class="subject-tag ${cls.subject || ''}">${cls.subject || ''}</span>
           <span class="time-badge">${cls.time || '-'}</span>
           <span style="font-size:12px;color:var(--text2)">${cls.teacher || ''}</span>
+          ${cls.is_clinic ? '<span class="clinic-badge">클리닉</span>' : ''}
         </div>
       </div>
     </div>
@@ -154,7 +159,7 @@ async function openClassDetailModal(cls) {
 
     ${cls.detail_memo ? `
       <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">수업 메모</div>
-      <div class="results-memo-box" style="margin-bottom:16px">${cls.detail_memo}</div>
+      <div class="results-memo-box" style="margin-bottom:16px">${escapeHtml(cls.detail_memo)}</div>
     ` : ''}
 
     <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
@@ -267,6 +272,17 @@ function buildClassFormHTML(mode, cls = null) {
       <textarea class="form-textarea" id="cf-detail-memo" placeholder="교재명, 현재 진도, 특이사항...">${c.detail_memo || ''}</textarea>
     </div>
     <div class="form-group">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div class="form-label" style="margin-bottom:2px">클리닉 수업</div>
+          <div style="font-size:12px;color:var(--text3)">출석 탭에서 학생별 해당없음 표시 가능</div>
+        </div>
+        <button class="toggle-btn ${c.is_clinic ? 'active' : ''}" id="cf-clinic-toggle" data-active="${c.is_clinic ? 'true' : 'false'}">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+    </div>
+    <div class="form-group">
       <label class="form-label">수강생</label>
       <div class="selected-student-tags" id="cf-selected-tags"></div>
       <input class="form-input" id="cf-student-search" type="text" placeholder="이름, 학교, 학년, 과목 검색..." />
@@ -280,6 +296,17 @@ function buildClassFormHTML(mode, cls = null) {
 }
 
 function setupClassForm(mode, cls) {
+  // 클리닉 토글
+  const clinicToggle = document.getElementById('cf-clinic-toggle')
+  if (clinicToggle) {
+    clinicToggle.onclick = (e) => {
+      e.stopPropagation()
+      const next = clinicToggle.dataset.active !== 'true'
+      clinicToggle.dataset.active = String(next)
+      clinicToggle.classList.toggle('active', next)
+    }
+  }
+
   // 과목 — 단일 선택
   document.querySelectorAll('#cf-subjects .subject-toggle').forEach(btn => {
     btn.onclick = () => {
@@ -371,6 +398,7 @@ function setupClassForm(mode, cls) {
       time: document.getElementById('cf-time').value.trim(),
       days,
       detail_memo: document.getElementById('cf-detail-memo').value.trim(),
+      is_clinic: document.getElementById('cf-clinic-toggle')?.dataset.active === 'true',
     }
 
     const btn = document.getElementById('cf-submit')

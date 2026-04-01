@@ -173,6 +173,7 @@ async function loadAttendanceData() {
     attendanceCache[r.class_id][r.student_id] = {
       status: r.status,
       homework_pct: r.homework_pct || 0,
+      is_na: r.is_na || false,
     }
   })
 
@@ -312,13 +313,15 @@ function accordionHTML(cls) {
                   const student = typeof s === 'object' ? s : { id: sid, name: '?' }
                   const score = testScoreCache[cls.id]?.[sid] ?? ''
                   const grade = scoreToGrade(score)
+                  const isNa = attendanceCache[cls.id]?.[sid]?.is_na || false
                   return `
                     <div class="test-student-row">
                       <div class="test-student-name">${student.name}</div>
                       <input class="test-score-input" type="text" inputmode="numeric"
-                        placeholder="점수" value="${score !== '' ? score : ''}"
-                        id="score-${cls.id}-${sid}" data-class-id="${cls.id}" data-student-id="${sid}" />
-                      <div class="score-grade ${grade}" id="grade-${cls.id}-${sid}">${grade}</div>
+                        placeholder="${isNa ? '해당없음' : '점수'}" value="${!isNa && score !== '' ? score : ''}"
+                        id="score-${cls.id}-${sid}" data-class-id="${cls.id}" data-student-id="${sid}"
+                        ${isNa ? 'disabled' : ''} />
+                      <div class="score-grade ${isNa ? 'none' : grade}" id="grade-${cls.id}-${sid}">${isNa ? '-' : grade}</div>
                     </div>
                   `
                 }).join('')
@@ -359,17 +362,20 @@ function renderStudentRows(cls) {
     const hwColor = hw >= 80 ? 'var(--green)' : hw >= 50 ? 'var(--yellow)' : hw > 0 ? 'var(--red)' : 'var(--border)'
 
     const memoVal = studentMemoCache[cls.id]?.[sid] || ''
+    const isNa = cache.is_na || false
+    const isClinic = !!cls.is_clinic
+
     return `
-      <div class="att-student-row" data-student-id="${sid}" data-class-id="${cls.id}">
+      <div class="att-student-row${isNa ? ' is-na' : ''}" data-student-id="${sid}" data-class-id="${cls.id}">
         <div class="att-avatar ${avatarClass}">${student.name.charAt(0)}</div>
         <div class="att-student-info">
           <div class="att-student-name">${student.name}</div>
           <div class="att-student-school">${student.school || ''}</div>
         </div>
         <div class="att-buttons">
-          <button class="att-btn present ${status === 'present' ? 'active' : ''}" data-status="present">출석</button>
-          <button class="att-btn late ${status === 'late' ? 'active' : ''}" data-status="late">지각</button>
-          <button class="att-btn absent ${status === 'absent' ? 'active' : ''}" data-status="absent">결석</button>
+          <button class="att-btn present ${status === 'present' && !isNa ? 'active' : ''}" data-status="present" ${isNa ? 'disabled' : ''}>출석</button>
+          <button class="att-btn late ${status === 'late' && !isNa ? 'active' : ''}" data-status="late" ${isNa ? 'disabled' : ''}>지각</button>
+          <button class="att-btn absent ${status === 'absent' && !isNa ? 'active' : ''}" data-status="absent" ${isNa ? 'disabled' : ''}>결석</button>
         </div>
         <div class="homework-slider-wrap">
           <div class="homework-slider-label">
@@ -381,15 +387,26 @@ function renderStudentRows(cls) {
             style="background: linear-gradient(to right, ${hwColor} ${hw}%, var(--border) ${hw}%)"
             id="hw-slider-${cls.id}-${sid}"
             data-class-id="${cls.id}"
-            data-student-id="${sid}" />
+            data-student-id="${sid}"
+            ${isNa ? 'disabled' : ''} />
         </div>
         <div class="student-memo-wrap">
-          <input class="student-memo-input" type="text"
+          ${isClinic ? `
+            <div class="na-toggle-wrap">
+              <button class="toggle-btn toggle-btn-sm${isNa ? ' active' : ''}" id="na-toggle-${cls.id}-${sid}"
+                data-active="${isNa}" data-class-id="${cls.id}" data-student-id="${sid}">
+                <span class="toggle-knob"></span>
+              </button>
+              <span class="na-toggle-label">해당없음</span>
+            </div>
+          ` : ''}
+          <textarea class="student-memo-input"
             id="smemo-${cls.id}-${sid}"
-            placeholder="개인 메모..."
-            value="${escapeHtml(memoVal)}"
+            placeholder="${isNa ? '해당없음' : '개인 메모...'}"
             data-class-id="${cls.id}"
-            data-student-id="${sid}" />
+            data-student-id="${sid}"
+            rows="1"
+            ${isNa ? 'disabled' : ''}>${escapeHtml(memoVal)}</textarea>
         </div>
       </div>
     `
@@ -627,6 +644,48 @@ function bindClassAccordion(cls) {
     input.addEventListener('click', (e) => e.stopPropagation())
   })
 
+  // 해당없음 토글 (클리닉 수업 전용)
+  item.querySelectorAll('[id^="na-toggle-"]').forEach(toggle => {
+    toggle.onclick = (e) => {
+      e.stopPropagation()
+      const cid = toggle.dataset.classId
+      const sid = toggle.dataset.studentId
+      const isNa = toggle.dataset.active !== 'true'
+
+      toggle.dataset.active = String(isNa)
+      toggle.classList.toggle('active', isNa)
+
+      if (!attendanceCache[cid]) attendanceCache[cid] = {}
+      attendanceCache[cid][sid] = { ...attendanceCache[cid][sid], is_na: isNa }
+
+      // 해당 학생 행 비활성화/활성화
+      const row = item.querySelector(`.att-student-row[data-student-id="${sid}"]`)
+      if (row) {
+        row.classList.toggle('is-na', isNa)
+        row.querySelectorAll('.att-btn').forEach(b => {
+          b.disabled = isNa
+          if (isNa) b.classList.remove('active')
+        })
+        const slider = document.getElementById(`hw-slider-${cid}-${sid}`)
+        if (slider) slider.disabled = isNa
+        const memo = document.getElementById(`smemo-${cid}-${sid}`)
+        if (memo) memo.disabled = isNa
+      }
+
+      // 테스트 패널 입력 비활성화/활성화
+      const scoreInput = document.getElementById(`score-${cid}-${sid}`)
+      if (scoreInput) {
+        scoreInput.disabled = isNa
+        scoreInput.placeholder = isNa ? '해당없음' : '점수'
+      }
+
+      const memo = document.getElementById(`smemo-${cid}-${sid}`)
+      if (memo) memo.placeholder = isNa ? '해당없음' : '개인 메모...'
+
+      updateSummaryPill(cid)
+    }
+  })
+
   // 출결 저장 버튼
   const attSaveBtn = document.getElementById(`att-save-${classId}`)
   if (attSaveBtn) {
@@ -639,13 +698,15 @@ function bindClassAccordion(cls) {
         for (const s of students) {
           const sid = typeof s === 'object' ? s.id : s
           const cached = attendanceCache[classId]?.[sid] || {}
+          const isNa = cached.is_na || false
           await upsertAttendance(currentDate, classId, sid, {
-            status: cached.status || '',
-            homework_pct: cached.homework_pct ?? 0,
+            status: isNa ? '' : (cached.status || ''),
+            homework_pct: isNa ? 0 : (cached.homework_pct ?? 0),
+            is_na: isNa,
           })
           const memoInput = document.getElementById(`smemo-${classId}-${sid}`)
           if (memoInput) {
-            await upsertStudentMemo(currentDate, classId, sid, memoInput.value.trim())
+            await upsertStudentMemo(currentDate, classId, sid, isNa ? '' : memoInput.value.trim())
           }
         }
         showToast('출결이 저장되었습니다', 'success')

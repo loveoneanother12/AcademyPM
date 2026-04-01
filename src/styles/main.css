@@ -510,6 +510,18 @@ body {
   flex-wrap: wrap;
 }
 
+.clinic-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent2);
+  background: color-mix(in srgb, var(--accent2) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent2) 30%, transparent);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+
 .time-badge {
   display: inline-flex;
   align-items: center;
@@ -1336,14 +1348,68 @@ body {
   border-bottom: none;
 }
 
+/* 해당없음 토글 래퍼 */
+.na-toggle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.na-toggle-label {
+  font-size: 9px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+/* 작은 토글 (해당없음용) */
+.toggle-btn-sm {
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toggle-btn-sm .toggle-knob {
+  width: 14px;
+  height: 14px;
+}
+
+.toggle-btn-sm.active .toggle-knob {
+  transform: translateX(14px);
+}
+
+.att-student-row.is-na .att-avatar {
+  opacity: 0.4;
+}
+
+.att-student-row.is-na .att-student-info {
+  opacity: 0.4;
+}
+
+.att-student-row.is-na .homework-slider-wrap {
+  opacity: 0.3;
+}
+
+.att-student-row.is-na .student-memo-input {
+  opacity: 0.3;
+}
+
 .student-memo-wrap {
   flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: -2px;
 }
 
 .student-memo-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   background: transparent;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
   border: none;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
@@ -1669,8 +1735,9 @@ body {
 
 .results-class-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
@@ -1678,6 +1745,10 @@ body {
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
+  flex: 1;
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .results-section-label {
@@ -1715,6 +1786,16 @@ body {
   font-size: 13px;
   color: var(--text);
   line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.results-student-memo {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  padding: 4px 0 6px 0;
+  margin-top: -4px;
 }
 
 .results-score-row {
@@ -1747,7 +1828,7 @@ body {
 }
 
 .detail-stat-box {
-  background: var(--bg3);
+  background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px 8px;
