@@ -1,0 +1,483 @@
+/**
+ * 탭 1: 학생 관리
+ */
+
+import {
+  getStudents,
+  getClasses,
+  insertRow,
+  updateRow,
+  deleteRow,
+  getStudentAttendance,
+  getStudentTestScores,
+} from '../api.js'
+import { openModal, closeModal } from '../components/modal.js'
+import { showToast } from '../components/toast.js'
+import { isOnline } from '../lib/supabase.js'
+
+let allStudents = []
+let searchQuery = ''
+
+const SUBJECTS = ['수학', '영어', '국어', '과학']
+const GRADES = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3']
+
+export async function renderStudentsPage(container) {
+  container.innerHTML = `
+    <div class="search-wrap">
+      <input class="search-input" id="student-search" type="text" placeholder="이름 또는 학교 검색..." value="${searchQuery}" />
+    </div>
+    <div id="students-list-wrap" class="page-wrap">
+      <div class="loading-screen"><div class="loading-spinner"></div></div>
+    </div>
+    ${isOnline ? '' : '<div class="offline-banner">오프라인 모드 — 샘플 데이터</div>'}
+  `
+
+  // FAB 버튼
+  document.getElementById('header-actions').innerHTML = ''
+  let fab = document.querySelector('.fab')
+  if (!fab) {
+    fab = document.createElement('button')
+    fab.className = 'fab'
+    fab.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+    document.body.appendChild(fab)
+  }
+  fab.onclick = () => openAddStudentModal()
+
+  // 검색
+  container.querySelector('#student-search').addEventListener('input', (e) => {
+    searchQuery = e.target.value.toLowerCase()
+    renderStudentList()
+  })
+
+  await loadStudents()
+}
+
+async function loadStudents() {
+  allStudents = await getStudents()
+  renderStudentList()
+}
+
+function renderStudentList() {
+  const wrap = document.getElementById('students-list-wrap')
+  if (!wrap) return
+
+  const filtered = allStudents.filter(s =>
+    s.name.toLowerCase().includes(searchQuery) ||
+    (s.school || '').toLowerCase().includes(searchQuery)
+  )
+
+  if (filtered.length === 0) {
+    wrap.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">👤</div>
+        <div class="empty-state-text">${searchQuery ? '검색 결과가 없습니다' : '등록된 학생이 없습니다'}</div>
+        <div class="empty-state-sub">+ 버튼으로 학생을 추가하세요</div>
+      </div>
+    `
+    return
+  }
+
+  wrap.innerHTML = `<div class="card-list">${filtered.map(s => studentCardHTML(s)).join('')}</div>`
+
+  // 카드 클릭 이벤트
+  wrap.querySelectorAll('.card[data-student-id]').forEach(card => {
+    card.addEventListener('click', () => {
+      const student = allStudents.find(s => s.id === card.dataset.studentId)
+      if (student) openStudentDetailModal(student)
+    })
+  })
+}
+
+function studentCardHTML(s) {
+  const avatarClass = s.status === 'inactive' ? 'inactive' : (s.gender === '남' ? 'male' : 'female')
+  const initial = s.name.charAt(0)
+  const subjects = s.subjects || []
+
+  return `
+    <div class="card student-card" data-student-id="${s.id}">
+      <div class="student-avatar ${avatarClass}">${initial}</div>
+      <div class="student-info">
+        <div class="student-name-row">
+          <span class="student-name">${s.name}</span>
+          ${s.gender ? `<span class="badge ${s.gender === '남' ? 'badge-male' : 'badge-female'}">${s.gender}</span>` : ''}
+          ${s.status === 'inactive' ? '<span class="badge badge-inactive">휴원</span>' : ''}
+        </div>
+        <div class="student-meta">${s.grade || ''} ${s.school ? '· ' + s.school : ''}</div>
+        <div class="student-tags">
+          ${subjects.map(sub => `<span class="subject-tag ${sub}">${sub}</span>`).join('')}
+        </div>
+      </div>
+    </div>
+  `
+}
+
+// ========================================
+// 학생 상세 모달
+// ========================================
+
+function scoreChartSVG(scores) {
+  const W = 260, H = 90
+  const pad = { top: 18, right: 10, bottom: 20, left: 28 }
+  const cW = W - pad.left - pad.right
+  const cH = H - pad.top - pad.bottom
+  const n = scores.length
+  if (n === 0) return ''
+
+  const pts = scores.map((r, i) => ({
+    x: pad.left + (n > 1 ? (i / (n - 1)) * cW : cW / 2),
+    y: pad.top + cH - (r.score / 100) * cH,
+    score: r.score,
+    date: r.date,
+  }))
+
+  const grids = [0, 50, 100].map(v => {
+    const y = (pad.top + cH - (v / 100) * cH).toFixed(1)
+    return `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="${pad.left - 4}" y="${(+y + 4).toFixed(1)}" text-anchor="end" fill="var(--text3)" font-size="8">${v}</text>`
+  }).join('')
+
+  const areaPoints = n > 1
+    ? `${pts[0].x.toFixed(1)},${(pad.top + cH).toFixed(1)} ${pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')} ${pts[n - 1].x.toFixed(1)},${(pad.top + cH).toFixed(1)}`
+    : ''
+
+  const area = n > 1 ? `<polygon points="${areaPoints}" fill="var(--accent)" opacity="0.12"/>` : ''
+
+  const polyline = n > 1
+    ? `<polyline points="${pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
+    : ''
+
+  const dots = pts.map(p =>
+    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--accent)" stroke="var(--bg3)" stroke-width="1.5"/>`
+  ).join('')
+
+  const valLabels = pts.map(p =>
+    `<text x="${p.x.toFixed(1)}" y="${(p.y - 7).toFixed(1)}" text-anchor="middle" fill="var(--text)" font-size="9" font-weight="600">${p.score}</text>`
+  ).join('')
+
+  const dateLabels = pts.map(p => {
+    const day = parseInt(p.date.slice(-2), 10)
+    return `<text x="${p.x.toFixed(1)}" y="${(pad.top + cH + 14).toFixed(1)}" text-anchor="middle" fill="var(--text3)" font-size="8">${day}일</text>`
+  }).join('')
+
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible">${grids}${area}${polyline}${dots}${valLabels}${dateLabels}</svg>`
+}
+
+async function openStudentDetailModal(student) {
+  const today = new Date().toLocaleDateString('sv-KR')
+  const fourWeeksAgo = (() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 28)
+    return d.toLocaleDateString('sv-KR')
+  })()
+
+  const [classes, attendanceData, testScoreData] = await Promise.all([
+    getClasses(),
+    getStudentAttendance(student.id),
+    getStudentTestScores(student.id),
+  ])
+
+  // 이 학생이 수강 중인 수업만
+  const myClasses = classes.filter(cls =>
+    (cls.students || []).some(s => (typeof s === 'object' ? s.id : s) === student.id)
+  )
+
+  // 수업별 데이터 계산
+  const classDataList = myClasses.map(cls => {
+    const clsAtt = attendanceData.filter(r => r.class_id === cls.id && r.date >= fourWeeksAgo && r.date <= today)
+    const presentCount = clsAtt.filter(r => r.status === 'present').length
+    const lateCount = clsAtt.filter(r => r.status === 'late').length
+    const absentCount = clsAtt.filter(r => r.status === 'absent').length
+    const totalCount = presentCount + lateCount + absentCount
+
+    const hwRows = clsAtt.filter(r => r.status === 'present' || r.status === 'late')
+    const hwAvg = hwRows.length > 0
+      ? Math.round(hwRows.reduce((sum, r) => sum + (r.homework_pct || 0), 0) / hwRows.length)
+      : null
+
+    const clsScores = testScoreData
+      .filter(r => r.class_id === cls.id && r.score !== null && r.score !== undefined)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-5)
+
+    return { cls, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores }
+  })
+
+  const subjects = student.subjects || []
+  const avatarClass = student.status === 'inactive' ? 'inactive' : (student.gender === '남' ? 'male' : 'female')
+
+  const infoCard = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:14px">
+      <div class="student-avatar ${avatarClass}" style="width:52px;height:52px;border-radius:16px;font-size:20px;flex-shrink:0">${student.name.charAt(0)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:2px">${student.name}</div>
+        <div style="font-size:13px;color:var(--text2)">${[student.grade, student.school].filter(Boolean).join(' · ')}</div>
+        ${subjects.length > 0 ? `<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">${subjects.map(sub => `<span class="subject-tag ${sub}">${sub}</span>`).join('')}</div>` : ''}
+        ${student.student_phone ? `<div style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:4px">${student.student_phone}</div>` : ''}
+      </div>
+    </div>
+  `
+
+  const sectionHeader = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:700;color:var(--text)">수업별 현황</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--text3)">지각 반영</span>
+        <button class="toggle-btn" id="late-toggle" data-active="false"><span class="toggle-knob"></span></button>
+      </div>
+    </div>
+    <div id="late-note" style="display:none;font-size:11px;color:var(--text3);text-align:right;margin-top:-8px;margin-bottom:10px">지각 1회가 출석 0.5회로 계산됩니다</div>
+  `
+
+  const classBoxes = classDataList.length > 0
+    ? classDataList.map(({ cls, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores }, idx) => {
+        const days = (cls.days || []).join(', ')
+        const meta = [days, cls.time].filter(Boolean).join(' · ')
+        const hwColor = hwAvg === null ? 'var(--text3)' : hwAvg >= 80 ? 'var(--green)' : hwAvg >= 50 ? 'var(--yellow)' : 'var(--red)'
+        const initRate = totalCount > 0 ? Math.round((presentCount + lateCount) / totalCount * 100) : null
+        const rateColor = initRate === null ? 'var(--text3)' : initRate >= 80 ? 'var(--green)' : initRate >= 50 ? 'var(--yellow)' : 'var(--red)'
+
+        return `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:${meta ? '6px' : '10px'}">
+              <span style="font-size:14px;font-weight:700;color:var(--text)">${cls.name}</span>
+              ${cls.subject ? `<span class="subject-tag ${cls.subject}" style="font-size:10px">${cls.subject}</span>` : ''}
+            </div>
+            ${meta ? `<div style="font-size:12px;color:var(--text3);margin-bottom:10px">${meta}</div>` : ''}
+            <div class="detail-stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">
+              <div class="detail-stat-box">
+                <div class="detail-stat-value" style="color:var(--green)">${presentCount}</div>
+                <div class="detail-stat-label">출석</div>
+              </div>
+              <div class="detail-stat-box">
+                <div class="detail-stat-value" style="color:var(--yellow)">${lateCount}</div>
+                <div class="detail-stat-label">지각</div>
+              </div>
+              <div class="detail-stat-box">
+                <div class="detail-stat-value" style="color:var(--red)">${absentCount}</div>
+                <div class="detail-stat-label">결석</div>
+              </div>
+              <div class="detail-stat-box">
+                <div class="detail-stat-value" style="color:var(--text)">${totalCount}</div>
+                <div class="detail-stat-label">총수업</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;${clsScores.length > 0 ? 'margin-bottom:10px' : ''}">
+              <div class="detail-stat-box" style="padding:10px;display:flex;flex-direction:column;align-items:center;gap:2px">
+                <div id="att-rate-${idx}" style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:${rateColor}">${initRate !== null ? initRate + '%' : '--'}</div>
+                <div style="font-size:11px;color:var(--text3)">4주 출석률</div>
+              </div>
+              <div class="detail-stat-box" style="padding:10px;display:flex;flex-direction:column;align-items:center;gap:2px">
+                <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:${hwColor}">${hwAvg !== null ? hwAvg + '%' : '--'}</div>
+                <div style="font-size:11px;color:var(--text3)">4주 과제 평균</div>
+              </div>
+            </div>
+            ${clsScores.length > 0 ? `
+              <div style="font-size:11px;color:var(--text3);margin-bottom:6px">최근 ${clsScores.length}회 테스트</div>
+              <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px">
+                ${scoreChartSVG(clsScores)}
+              </div>
+            ` : ''}
+          </div>
+        `
+      }).join('')
+    : `<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px 0">수강 중인 수업이 없습니다</div>`
+
+  openModal(`
+    <h2 class="modal-title">학생 상세</h2>
+    ${infoCard}
+    ${sectionHeader}
+    ${classBoxes}
+    <button class="btn btn-primary" id="detail-edit-btn" style="width:100%;margin-top:8px">수정하기</button>
+  `)
+
+  // 지각 반영 토글
+  let lateReflected = false
+  const lateToggle = document.getElementById('late-toggle')
+  const lateNote = document.getElementById('late-note')
+
+  function updateAttRates() {
+    classDataList.forEach(({ presentCount, lateCount, totalCount }, idx) => {
+      const el = document.getElementById('att-rate-' + idx)
+      if (!el) return
+      if (totalCount === 0) {
+        el.textContent = '--'
+        el.style.color = 'var(--text3)'
+      } else {
+        const rate = lateReflected
+          ? Math.round((presentCount + lateCount * 0.5) / totalCount * 100)
+          : Math.round((presentCount + lateCount) / totalCount * 100)
+        el.textContent = rate + '%'
+        el.style.color = rate >= 80 ? 'var(--green)' : rate >= 50 ? 'var(--yellow)' : 'var(--red)'
+      }
+    })
+    lateNote.style.display = lateReflected ? '' : 'none'
+  }
+
+  lateToggle.onclick = () => {
+    lateReflected = !lateReflected
+    lateToggle.dataset.active = String(lateReflected)
+    lateToggle.classList.toggle('active', lateReflected)
+    updateAttRates()
+  }
+
+  document.getElementById('detail-edit-btn').onclick = () => openEditStudentModal(student)
+}
+
+// ========================================
+// 학생 추가 모달
+// ========================================
+
+function openAddStudentModal() {
+  openModal(buildStudentFormHTML('add'), null)
+  setupStudentForm('add', null)
+}
+
+function openEditStudentModal(student) {
+  openModal(buildStudentFormHTML('edit', student), null)
+  setupStudentForm('edit', student)
+}
+
+function buildStudentFormHTML(mode, student = null) {
+  const s = student || {}
+  const selectedSubjects = s.subjects || []
+
+  return `
+    <h2 class="modal-title">${mode === 'add' ? '학생 추가' : '학생 수정'}</h2>
+    <div class="form-group">
+      <label class="form-label">이름 *</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="form-input" id="sf-name" type="text" placeholder="이름" value="${s.name || ''}" style="flex:0 0 70%" />
+        <button class="gender-btn ${s.gender === '남' ? 'selected' : ''}" data-gender="남" style="flex:1;padding:0;height:42px">남</button>
+        <button class="gender-btn ${s.gender === '여' ? 'selected' : ''}" data-gender="여" style="flex:1;padding:0;height:42px">여</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">학년</label>
+        <select class="form-select" id="sf-grade">
+          <option value="">선택</option>
+          ${GRADES.map(g => `<option value="${g}" ${s.grade === g ? 'selected' : ''}>${g}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">학교</label>
+        <input class="form-input" id="sf-school" type="text" placeholder="학교명" value="${s.school || ''}" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">수강 과목</label>
+      <div class="subject-selector" id="sf-subjects">
+        ${SUBJECTS.map(sub => `
+          <button class="subject-toggle ${selectedSubjects.includes(sub) ? 'selected' : ''}" data-subject="${sub}">${sub}</button>
+        `).join('')}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">학부모 연락처</label>
+        <input class="form-input" id="sf-parent-phone" type="tel" placeholder="010-0000-0000" value="${s.parent_phone || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">학생 연락처</label>
+        <input class="form-input" id="sf-student-phone" type="tel" placeholder="010-0000-0000" value="${s.student_phone || ''}" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">비고</label>
+      <textarea class="form-textarea" id="sf-notes" placeholder="메모...">${s.notes || ''}</textarea>
+    </div>
+    <input type="hidden" id="sf-teacher" value="${s.teacher || ''}" />
+    <input type="hidden" id="sf-status" value="${s.status || 'active'}" />
+    <div class="form-actions">
+      <button class="btn btn-secondary" id="sf-cancel">취소</button>
+      <button class="btn btn-primary" id="sf-submit">${mode === 'add' ? '추가' : '저장'}</button>
+    </div>
+  `
+}
+
+function setupStudentForm(mode, student) {
+  let selectedGender = student?.gender || ''
+
+  // 성별 버튼
+  document.querySelectorAll('.gender-btn').forEach(btn => {
+    btn.onclick = () => {
+      selectedGender = btn.dataset.gender
+      document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('selected'))
+      btn.classList.add('selected')
+    }
+  })
+
+  // 과목 토글
+  document.querySelectorAll('.subject-toggle').forEach(btn => {
+    btn.onclick = () => btn.classList.toggle('selected')
+  })
+
+  document.getElementById('sf-cancel').onclick = closeModal
+
+  document.getElementById('sf-submit').onclick = async () => {
+    const name = document.getElementById('sf-name').value.trim()
+    if (!name) { showToast('이름을 입력하세요', 'error'); return }
+
+    const selectedSubjects = [...document.querySelectorAll('.subject-toggle.selected')]
+      .map(b => b.dataset.subject)
+
+    const data = {
+      name,
+      gender: selectedGender,
+      grade: document.getElementById('sf-grade').value,
+      school: document.getElementById('sf-school').value.trim(),
+      subjects: selectedSubjects,
+      teacher: document.getElementById('sf-teacher').value.trim(),
+      parent_phone: document.getElementById('sf-parent-phone').value.trim(),
+      student_phone: document.getElementById('sf-student-phone').value.trim(),
+      status: document.getElementById('sf-status').value,
+      notes: document.getElementById('sf-notes').value.trim(),
+    }
+
+    const btn = document.getElementById('sf-submit')
+    btn.disabled = true
+    btn.textContent = '저장 중...'
+
+    try {
+      if (mode === 'add') {
+        await insertRow('students', data)
+        showToast('학생이 추가되었습니다', 'success')
+      } else {
+        await updateRow('students', student.id, data)
+        showToast('저장되었습니다', 'success')
+      }
+      closeModal()
+      await loadStudents()
+    } catch (e) {
+      showToast('저장 실패: ' + e.message, 'error')
+      btn.disabled = false
+      btn.textContent = mode === 'add' ? '추가' : '저장'
+    }
+  }
+}
+
+async function confirmDeleteStudent(student) {
+  openModal(`
+    <h2 class="modal-title">학생 삭제</h2>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.6">
+      <strong style="color:var(--text)">${student.name}</strong> 학생을 삭제하시겠습니까?<br>
+      관련 출결 기록도 모두 삭제됩니다.
+    </p>
+    <div class="form-actions">
+      <button class="btn btn-secondary" id="del-cancel">취소</button>
+      <button class="btn btn-danger" id="del-confirm">삭제</button>
+    </div>
+  `)
+
+  document.getElementById('del-cancel').onclick = closeModal
+  document.getElementById('del-confirm').onclick = async () => {
+    try {
+      await deleteRow('students', student.id)
+      showToast('삭제되었습니다', 'success')
+      closeModal()
+      await loadStudents()
+    } catch (e) {
+      showToast('삭제 실패: ' + e.message, 'error')
+    }
+  }
+}

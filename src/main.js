@@ -1,0 +1,75 @@
+/**
+ * AcademyPM v2 — 메인 진입점
+ * 탭 라우팅 및 페이지 전환 관리
+ */
+
+import './styles/main.css'
+import { renderStudentsPage } from './pages/students.js'
+import { renderClassesPage } from './pages/classes.js'
+import { renderAttendancePage } from './pages/attendance.js'
+import { renderResultsPage } from './pages/results.js'
+import { isOnline } from './lib/supabase.js'
+
+let currentTab = 'students'
+
+const PAGE_RENDERERS = {
+  students: renderStudentsPage,
+  classes: renderClassesPage,
+  attendance: renderAttendancePage,
+  results: renderResultsPage,
+}
+
+async function navigateTo(tab) {
+  if (currentTab === tab) return
+
+  // 이전 FAB 제거
+  const oldFab = document.querySelector('.fab')
+  if (oldFab) oldFab.remove()
+
+  currentTab = tab
+
+  // 탭 활성화
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab)
+  })
+
+  const content = document.getElementById('page-content')
+  content.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>'
+
+  try {
+    await PAGE_RENDERERS[tab](content)
+  } catch (e) {
+    console.error(`[main.js] navigateTo(${tab}) error:`, e)
+    content.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">⚠️</div>
+        <div class="empty-state-text">페이지 로드 중 오류가 발생했습니다</div>
+        <div class="empty-state-sub">${e.message}</div>
+      </div>
+    `
+  }
+}
+
+async function init() {
+  // 탭 클릭 이벤트
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => navigateTo(btn.dataset.tab))
+  })
+
+  // 오프라인 상태 표시
+  if (!isOnline) {
+    const logo = document.querySelector('.logo-text')
+    if (logo) logo.title = '오프라인 모드'
+  }
+
+  // 기본 탭으로 출석 탭 시작 (가장 많이 사용)
+  currentTab = null
+  await navigateTo('attendance')
+
+  // 네비게이션 활성화 업데이트
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === 'attendance')
+  })
+}
+
+init()
