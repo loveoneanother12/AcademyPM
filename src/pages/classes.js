@@ -78,7 +78,8 @@ function renderClassList() {
 
   const filtered = allClasses.filter(cls =>
     cls.name.toLowerCase().includes(searchQuery) ||
-    (cls.teacher || '').toLowerCase().includes(searchQuery)
+    (cls.teacher || '').toLowerCase().includes(searchQuery) ||
+    (cls.subject || '').toLowerCase().includes(searchQuery)
   )
 
   if (filtered.length === 0) {

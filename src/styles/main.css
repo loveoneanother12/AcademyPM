@@ -592,6 +592,11 @@ body {
   background: var(--border);
   border-radius: 100px;
   margin: 10px auto 0;
+  cursor: grab;
+  padding: 12px 60px;
+  box-sizing: content-box;
+  margin: -12px auto 0;
+  background-clip: content-box;
 }
 
 .modal-content {
