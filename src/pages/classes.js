@@ -24,7 +24,7 @@ function escapeHtml(str) {
 }
 
 const SUBJECTS = ['수학', '영어', '국어', '과학']
-const GRADES = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3']
+const GRADES = ['중1', '중2', '중3', '고1', '고2', '고3']
 const DAYS = ['월', '화', '수', '목', '금', '토', '일']
 
 export async function renderClassesPage(container) {
@@ -148,6 +148,7 @@ async function openClassDetailModal(cls) {
           <span class="subject-tag ${cls.subject || ''}">${cls.subject || ''}</span>
           <span class="time-badge">${cls.time || '-'}</span>
           <span style="font-size:12px;color:var(--text2)">${cls.teacher || ''}</span>
+          ${cls.sub_teacher ? `<span style="font-size:12px;color:var(--text3)">${cls.sub_teacher} (보조)</span>` : ''}
           ${cls.is_clinic ? '<span class="clinic-badge">클리닉</span>' : ''}
         </div>
       </div>
@@ -253,6 +254,17 @@ function buildClassFormHTML(mode, cls = null) {
         </select>
       </div>
     </div>
+    <div class="form-group">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${c.sub_teacher ? '8px' : '0'}">
+        <label class="form-label" style="margin-bottom:0">보조강사</label>
+        <button class="toggle-btn ${c.sub_teacher ? 'active' : ''}" id="cf-sub-teacher-toggle" data-active="${c.sub_teacher ? 'true' : 'false'}">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+      <div id="cf-sub-teacher-wrap" style="display:${c.sub_teacher ? 'block' : 'none'}">
+        <input class="form-input" id="cf-sub-teacher" type="text" placeholder="보조강사명" value="${c.sub_teacher || ''}" />
+      </div>
+    </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">수업 시간</label>
@@ -296,6 +308,21 @@ function buildClassFormHTML(mode, cls = null) {
 }
 
 function setupClassForm(mode, cls) {
+  // 보조강사 토글
+  const subTeacherToggle = document.getElementById('cf-sub-teacher-toggle')
+  if (subTeacherToggle) {
+    subTeacherToggle.onclick = (e) => {
+      e.stopPropagation()
+      const next = subTeacherToggle.dataset.active !== 'true'
+      subTeacherToggle.dataset.active = String(next)
+      subTeacherToggle.classList.toggle('active', next)
+      const wrap = document.getElementById('cf-sub-teacher-wrap')
+      wrap.style.display = next ? 'block' : 'none'
+      const row = subTeacherToggle.closest('.form-group').querySelector('div')
+      row.style.marginBottom = next ? '8px' : '0'
+    }
+  }
+
   // 클리닉 토글
   const clinicToggle = document.getElementById('cf-clinic-toggle')
   if (clinicToggle) {
@@ -399,6 +426,9 @@ function setupClassForm(mode, cls) {
       days,
       detail_memo: document.getElementById('cf-detail-memo').value.trim(),
       is_clinic: document.getElementById('cf-clinic-toggle')?.dataset.active === 'true',
+      sub_teacher: document.getElementById('cf-sub-teacher-toggle')?.dataset.active === 'true'
+        ? (document.getElementById('cf-sub-teacher').value.trim() || null)
+        : null,
     }
 
     const btn = document.getElementById('cf-submit')
