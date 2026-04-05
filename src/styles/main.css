@@ -1833,24 +1833,23 @@ body {
 }
 
 .detail-stat-box {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 8px;
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 10px 4px;
   text-align: center;
 }
 
 .detail-stat-value {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  font-family: 'DM Mono', monospace;
   color: var(--text);
   margin-bottom: 2px;
 }
 
 .detail-stat-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text3);
+  margin-top: 2px;
 }
 
 /* 테스트 점수 차트 */
@@ -1968,4 +1967,275 @@ body {
   color: var(--yellow);
   text-align: center;
   margin: 10px 16px 0;
+}
+
+/* === 링크/QR 생성 패널 === */
+.link-gen-panel {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.link-expiry-options {
+  display: flex;
+  gap: 6px;
+}
+
+.expiry-opt {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.expiry-opt.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.link-result-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.link-url-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg3);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.link-url-text {
+  font-size: 11px;
+  color: var(--text2);
+  word-break: break-all;
+  flex: 1;
+  font-family: 'DM Mono', monospace;
+}
+
+/* === 리포트 페이지 === */
+.report-page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-logo {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -0.5px;
+}
+
+.report-period {
+  font-size: 12px;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+}
+
+.report-student-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 20px;
+}
+
+.report-student-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.report-student-meta {
+  font-size: 13px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+.report-class-block {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.report-class-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.report-class-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.report-class-teacher {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 12px;
+}
+
+.report-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.report-stat-box {
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 10px 4px;
+  text-align: center;
+}
+
+.report-stat-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.report-stat-val.green { color: var(--green); }
+.report-stat-val.yellow { color: var(--yellow); }
+.report-stat-val.red { color: var(--red); }
+
+.report-stat-label {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+.report-rate-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.report-rate-box {
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+}
+
+.report-rate-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.report-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 10px 0 6px;
+}
+
+.report-score-list, .report-memo-list {
+  background: var(--bg3);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.report-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-score-row:last-child { border-bottom: none; }
+
+.report-score-date {
+  font-size: 12px;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+}
+
+.report-score-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.report-memo-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-memo-row:last-child { border-bottom: none; }
+
+.report-memo-text {
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 3px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.report-footer {
+  font-size: 11px;
+  color: var(--text3);
+  text-align: center;
+  margin-top: 24px;
+}
+
+.report-empty {
+  font-size: 14px;
+  color: var(--text3);
+  text-align: center;
+  padding: 40px 0;
+}
+
+.report-error-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 20px;
+  text-align: center;
+  margin-top: 40px;
+}
+
+.report-error-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.report-error-msg {
+  font-size: 15px;
+  color: var(--text2);
+  line-height: 1.6;
 }

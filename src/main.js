@@ -8,6 +8,7 @@ import { renderStudentsPage } from './pages/students.js'
 import { renderClassesPage } from './pages/classes.js'
 import { renderAttendancePage } from './pages/attendance.js'
 import { renderResultsPage } from './pages/results.js'
+import { renderReportPage } from './pages/report.js'
 import { isOnline } from './lib/supabase.js'
 
 let currentTab = 'students'
@@ -51,6 +52,18 @@ async function navigateTo(tab) {
 }
 
 async function init() {
+  // 공유 링크 모드: ?report=TOKEN
+  const reportToken = new URLSearchParams(window.location.search).get('report')
+  if (reportToken) {
+    // 앱 UI 숨기고 리포트 페이지만 표시
+    document.getElementById('app-header')?.style.setProperty('display', 'none')
+    document.getElementById('bottom-nav')?.style.setProperty('display', 'none')
+    const content = document.getElementById('page-content')
+    content.style.paddingBottom = '0'
+    await renderReportPage(content, reportToken)
+    return
+  }
+
   // 탭 클릭 이벤트
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.tab))

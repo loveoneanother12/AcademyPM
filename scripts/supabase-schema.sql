@@ -83,6 +83,17 @@ create table if not exists student_memos (
   unique(date, class_id, student_id)
 );
 
+-- student_tokens 테이블 (학생별 공유 링크 토큰)
+create table if not exists student_tokens (
+  id          uuid primary key default gen_random_uuid(),
+  student_id  uuid references students(id) on delete cascade,
+  token       text unique not null,
+  expires_at  timestamptz not null,
+  data_from   date not null,
+  data_to     date not null,
+  created_at  timestamptz default now()
+);
+
 -- ============================================================
 -- RLS 비활성화 (anon key로 전체 접근 허용)
 -- 추후 인증 추가 시 활성화 필요
@@ -95,6 +106,7 @@ alter table attendance      disable row level security;
 alter table class_memos     disable row level security;
 alter table test_scores     disable row level security;
 alter table student_memos   disable row level security;
+alter table student_tokens  disable row level security;
 
 -- ============================================================
 -- 인덱스 (조회 성능 최적화)
@@ -117,3 +129,6 @@ create index if not exists idx_class_students_student on class_students(student_
 alter table classes    add column if not exists is_clinic   boolean default false;
 alter table classes    add column if not exists sub_teacher text;
 alter table attendance add column if not exists is_na       boolean default false;
+
+-- 기존 DB에 unique(student_id) 제약이 있는 경우 제거 (링크 다중 생성 허용)
+alter table student_tokens drop constraint if exists student_tokens_student_id_key;

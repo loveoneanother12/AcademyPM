@@ -412,6 +412,60 @@ export async function upsertTestScore(date, classId, studentId, score) {
   return true
 }
 
+// ========================================
+// 학생 토큰 (공유 링크)
+// ========================================
+
+export async function upsertStudentToken(studentId, token, expiresAt, dataFrom, dataTo) {
+  if (!isOnline) return { token }
+  const { error } = await supabase
+    .from('student_tokens')
+    .insert({ student_id: studentId, token, expires_at: expiresAt, data_from: dataFrom, data_to: dataTo })
+  if (error) handleError(error, 'upsertStudentToken')
+  return { token }
+}
+
+export async function getStudentToken(token) {
+  if (!isOnline) return null
+  const { data, error } = await supabase
+    .from('student_tokens')
+    .select('*, students(*)')
+    .eq('token', token)
+    .maybeSingle()
+  if (error) handleError(error, 'getStudentToken')
+  return data
+}
+
+export async function getStudentReportData(studentId, dataFrom, dataTo) {
+  if (!isOnline) return { attendance: [], testScores: [], memos: [], classes: [] }
+  const [attRes, scoreRes, memoRes, classRes] = await Promise.all([
+    supabase.from('attendance').select('*')
+      .eq('student_id', studentId)
+      .gte('date', dataFrom).lte('date', dataTo),
+    supabase.from('test_scores').select('*')
+      .eq('student_id', studentId)
+      .gte('date', dataFrom).lte('date', dataTo)
+      .order('date', { ascending: false }),
+    supabase.from('student_memos').select('*')
+      .eq('student_id', studentId)
+      .gte('date', dataFrom).lte('date', dataTo)
+      .order('date', { ascending: false }),
+    supabase.from('classes')
+      .select('*, class_students!inner(student_id)')
+      .eq('class_students.student_id', studentId),
+  ])
+  if (attRes.error) handleError(attRes.error, 'getStudentReportData/attendance')
+  if (scoreRes.error) handleError(scoreRes.error, 'getStudentReportData/scores')
+  if (memoRes.error) handleError(memoRes.error, 'getStudentReportData/memos')
+  if (classRes.error) handleError(classRes.error, 'getStudentReportData/classes')
+  return {
+    attendance: attRes.data || [],
+    testScores: scoreRes.data || [],
+    memos: memoRes.data || [],
+    classes: classRes.data || [],
+  }
+}
+
 export async function upsertStudentMemo(date, classId, studentId, memo) {
   if (!isOnline) {
     const idx = offlineStudentMemos.findIndex(

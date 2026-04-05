@@ -11,7 +11,9 @@ import {
   getStudentAttendance,
   getStudentTestScores,
   getStudentMemos,
+  upsertStudentToken,
 } from '../api.js'
+import QRCode from 'qrcode'
 import { openModal, closeModal } from '../components/modal.js'
 import { showToast } from '../components/toast.js'
 import { isOnline } from '../lib/supabase.js'
@@ -268,31 +270,41 @@ async function openStudentDetailModal(student) {
               </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;${clsScores.length > 0 ? 'margin-bottom:10px' : ''}">
-              <div class="detail-stat-box" style="padding:10px;display:flex;flex-direction:column;align-items:center;gap:2px">
-                <div id="att-rate-${idx}" style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:${rateColor}">${initRate !== null ? initRate + '%' : '--'}</div>
-                <div style="font-size:11px;color:var(--text3)">4주 출석률</div>
+              <div class="report-rate-box">
+                <div id="att-rate-${idx}" class="report-rate-val" style="color:${rateColor}">${initRate !== null ? initRate + '%' : '--'}</div>
+                <div class="report-stat-label">4주 출석률</div>
               </div>
-              <div class="detail-stat-box" style="padding:10px;display:flex;flex-direction:column;align-items:center;gap:2px">
-                <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:${hwColor}">${hwAvg !== null ? hwAvg + '%' : '--'}</div>
-                <div style="font-size:11px;color:var(--text3)">4주 과제 평균</div>
+              <div class="report-rate-box">
+                <div class="report-rate-val" style="color:${hwColor}">${hwAvg !== null ? hwAvg + '%' : '--'}</div>
+                <div class="report-stat-label">4주 과제 평균</div>
               </div>
             </div>
             ${clsScores.length > 0 ? `
               <div style="font-size:11px;color:var(--text3);margin-bottom:6px">최근 ${clsScores.length}회 테스트</div>
-              <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px">
+              <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px;margin-bottom:8px">
                 ${scoreChartSVG(clsScores)}
+              </div>
+              <div class="report-score-list">
+                ${clsScores.map(s => `
+                  <div class="report-score-row">
+                    <span class="report-score-date">${s.date}</span>
+                    <span class="report-score-val">${s.score}점</span>
+                  </div>
+                `).join('')}
               </div>
             ` : ''}
 
             ${clsMemos.length > 0 ? `
               <div style="font-size:11px;color:var(--text3);margin-top:10px;margin-bottom:6px">4주 개인 메모</div>
               <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px">
-                ${clsMemos.map(m => `
+                ${clsMemos.map(m => {
+                  const hasContent = m.memo && m.memo.trim()
+                  return `
                   <div style="display:flex;flex-direction:column;gap:2px">
                     <span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${m.date}</span>
-                    <span style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${m.memo}</span>
-                  </div>
-                `).join('<div style="height:1px;background:var(--border)"></div>')}
+                    <span style="font-size:13px;color:${hasContent ? 'var(--text)' : 'var(--text3)'};line-height:1.5;white-space:pre-wrap">${hasContent ? m.memo : '(작성내용 없음)'}</span>
+                  </div>`
+                }).join('<div style="height:1px;background:var(--border)"></div>')}
               </div>
             ` : ''}
           </div>
@@ -306,6 +318,8 @@ async function openStudentDetailModal(student) {
     ${sectionHeader}
     ${classBoxes}
     <button class="btn btn-primary" id="detail-edit-btn" style="width:100%;margin-top:8px">수정하기</button>
+    <button class="btn btn-secondary" id="detail-link-btn" style="width:100%;margin-top:8px">링크 / QR 생성</button>
+    <div id="detail-link-panel" style="display:none;margin-top:12px"></div>
   `)
 
   // 지각 반영 토글
@@ -339,6 +353,89 @@ async function openStudentDetailModal(student) {
   }
 
   document.getElementById('detail-edit-btn').onclick = () => openEditStudentModal(student)
+
+  document.getElementById('detail-link-btn').onclick = () => {
+    const panel = document.getElementById('detail-link-panel')
+    if (panel.style.display !== 'none') { panel.style.display = 'none'; return }
+
+    const today = new Date().toISOString().slice(0, 10)
+    const oneMonthAgo = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)
+
+    panel.style.display = 'block'
+    panel.innerHTML = `
+      <div class="link-gen-panel">
+        <div class="form-label" style="margin-bottom:8px">데이터 기간</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <input type="date" class="form-input" id="lp-from" value="${oneMonthAgo}" style="flex:1" />
+          <span style="color:var(--text3);font-size:13px">~</span>
+          <input type="date" class="form-input" id="lp-to" value="${today}" style="flex:1" />
+        </div>
+        <div class="form-label" style="margin-bottom:8px">링크 유효기간</div>
+        <div class="link-expiry-options" id="lp-expiry">
+          <button class="expiry-opt selected" data-days="7">1주일</button>
+          <button class="expiry-opt" data-days="30">1개월</button>
+          <button class="expiry-opt" data-days="90">3개월</button>
+          <button class="expiry-opt" data-days="0">무기한</button>
+        </div>
+        <button class="btn btn-primary" id="lp-generate" style="width:100%;margin-top:12px">링크 생성</button>
+        <div id="lp-result" style="display:none;margin-top:12px"></div>
+      </div>
+    `
+
+    panel.querySelectorAll('.expiry-opt').forEach(btn => {
+      btn.onclick = () => {
+        panel.querySelectorAll('.expiry-opt').forEach(b => b.classList.remove('selected'))
+        btn.classList.add('selected')
+      }
+    })
+
+    panel.querySelector('#lp-generate').onclick = async () => {
+      const from = document.getElementById('lp-from').value
+      const to = document.getElementById('lp-to').value
+      if (!from || !to || from > to) {
+        showToast('기간을 올바르게 설정하세요', 'error')
+        return
+      }
+      const days = parseInt(panel.querySelector('.expiry-opt.selected')?.dataset.days || '30')
+      const expiresAt = days === 0
+        ? new Date('2099-12-31').toISOString()
+        : new Date(Date.now() + days * 864e5).toISOString()
+
+      const token = crypto.randomUUID()
+      const generateBtn = panel.querySelector('#lp-generate')
+      generateBtn.disabled = true
+      generateBtn.textContent = '생성 중...'
+
+      try {
+        await upsertStudentToken(student.id, token, expiresAt, from, to)
+        const url = `${location.origin}${location.pathname}?name=${encodeURIComponent(student.name)}&report=${token}`
+        const qrDataUrl = await QRCode.toDataURL(url, { width: 180, margin: 1, color: { dark: '#ffffff', light: '#1a1a2e' } })
+
+        const resultEl = panel.querySelector('#lp-result')
+        resultEl.style.display = 'block'
+        resultEl.innerHTML = `
+          <div class="link-result-box">
+            <img src="${qrDataUrl}" alt="QR Code" style="width:150px;height:150px;border-radius:10px;display:block;margin:0 auto 12px" />
+            <div class="link-url-wrap">
+              <div class="link-url-text" id="lp-url">${url}</div>
+              <button class="btn btn-secondary" id="lp-copy" style="font-size:12px;padding:6px 12px;flex-shrink:0">복사</button>
+            </div>
+            <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">
+              ${days === 0 ? '무기한' : `${days}일 후`} 만료 · ${from} ~ ${to}
+            </div>
+          </div>
+        `
+        resultEl.querySelector('#lp-copy').onclick = () => {
+          navigator.clipboard.writeText(url).then(() => showToast('링크 복사됨', 'success'))
+        }
+      } catch (e) {
+        showToast('생성 실패: ' + e.message, 'error')
+      } finally {
+        generateBtn.disabled = false
+        generateBtn.textContent = '링크 생성'
+      }
+    }
+  }
 }
 
 // ========================================
