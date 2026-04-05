@@ -420,6 +420,7 @@ async function openStudentDetailModal(student) {
               <div class="link-url-text" id="lp-url">${url}</div>
               <button class="btn btn-secondary" id="lp-copy" style="font-size:12px;padding:6px 12px;flex-shrink:0">복사</button>
             </div>
+            <a id="lp-qr-download" href="${qrDataUrl}" download="${student.name}_QR.png" class="btn btn-secondary" style="display:block;width:100%;text-align:center;margin-top:8px;font-size:12px;box-sizing:border-box">QR코드 이미지 저장</a>
             <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">
               ${days === 0 ? '무기한' : `${days}일 후`} 만료 · ${from} ~ ${to}
             </div>
