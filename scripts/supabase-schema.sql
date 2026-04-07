@@ -70,6 +70,7 @@ create table if not exists test_scores (
   class_id    uuid references classes(id) on delete cascade,
   student_id  uuid references students(id) on delete cascade,
   score       integer,   -- 0~100
+  test_name   text,      -- 테스트명
   unique(date, class_id, student_id)
 );
 
@@ -132,3 +133,9 @@ alter table attendance add column if not exists is_na       boolean default fals
 
 -- 기존 DB에 unique(student_id) 제약이 있는 경우 제거 (링크 다중 생성 허용)
 alter table student_tokens drop constraint if exists student_tokens_student_id_key;
+alter table test_scores    add column if not exists test_name text;
+
+-- 하루에 테스트 여러 번 지원 (test_slot)
+alter table test_scores    add column if not exists test_slot integer default 0;
+alter table test_scores    drop constraint if exists test_scores_date_class_id_student_id_key;
+alter table test_scores    add constraint test_scores_unique_slot unique(date, class_id, student_id, test_slot);

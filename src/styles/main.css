@@ -1211,12 +1211,17 @@ body {
 .test-no-exam-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
+}
+
+.test-name-input {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
-  color: var(--text2);
+  padding: 7px 10px;
 }
 
 .toggle-btn {
@@ -1291,9 +1296,23 @@ body {
 .test-student-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.test-input-area {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.test-skip-label {
+  font-size: 12px;
+  color: var(--text3);
+  flex: 1;
+  text-align: center;
 }
 
 .test-student-row:last-child {
@@ -1803,11 +1822,28 @@ body {
   margin-top: -4px;
 }
 
+.results-test-box {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.results-test-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  padding: 7px 12px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+}
+
 .results-score-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 13px;
   border-bottom: 1px solid var(--border);
 }
@@ -1967,6 +2003,69 @@ body {
   color: var(--yellow);
   text-align: center;
   margin: 10px 16px 0;
+}
+
+/* === 테스트 입력 A/B 모드 토글 === */
+.score-mode-ab {
+  display: flex;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.ab-opt {
+  flex: 1;
+  padding: 5px 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ab-opt.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.fraction-mode-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.frac-input {
+  width: 44px;
+  padding: 6px 4px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  text-align: center;
+  outline: none;
+}
+
+.frac-input:focus {
+  border-color: var(--accent);
+}
+
+.frac-sep {
+  font-size: 14px;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.score-mode-wrap {
+  flex: 1;
+  display: flex;
 }
 
 /* === 링크/QR 생성 패널 === */

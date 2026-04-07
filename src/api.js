@@ -390,23 +390,24 @@ export async function upsertClassMemo(date, classId, memo) {
   return true
 }
 
-export async function upsertTestScore(date, classId, studentId, score) {
+export async function upsertTestScore(date, classId, studentId, score, testName = null, testSlot = 0) {
   if (!isOnline) {
     const idx = offlineTestScores.findIndex(
-      r => r.date === date && r.class_id === classId && r.student_id === studentId
+      r => r.date === date && r.class_id === classId && r.student_id === studentId && (r.test_slot ?? 0) === testSlot
     )
     if (idx !== -1) {
       offlineTestScores[idx].score = score
+      offlineTestScores[idx].test_name = testName
     } else {
-      offlineTestScores.push({ id: genId(), date, class_id: classId, student_id: studentId, score })
+      offlineTestScores.push({ id: genId(), date, class_id: classId, student_id: studentId, score, test_name: testName, test_slot: testSlot })
     }
     return true
   }
   const { error } = await supabase
     .from('test_scores')
     .upsert(
-      { date, class_id: classId, student_id: studentId, score },
-      { onConflict: 'date,class_id,student_id' }
+      { date, class_id: classId, student_id: studentId, score, test_name: testName, test_slot: testSlot },
+      { onConflict: 'date,class_id,student_id,test_slot' }
     )
   if (error) handleError(error, 'upsertTestScore')
   return true

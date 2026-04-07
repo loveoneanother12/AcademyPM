@@ -282,20 +282,36 @@ function renderResultsContent() {
           <div class="results-memo-box">${memo.memo}</div>
         ` : ''}
 
-        ${scores.length > 0 ? `
-          <div class="results-section-label">테스트 점수</div>
-          ${scores.map(r => {
-            const student = students.find(s => s.id === r.student_id)
-            const g = scoreToGrade(r.score)
-            return `
-              <div class="results-score-row">
-                <span class="results-score-name">${student?.name || '?'}</span>
-                <span class="results-score-val">${r.score}점</span>
-                <span class="score-grade ${g}">${g}</span>
+        ${scores.length > 0 ? (() => {
+          // test_slot 기준으로 그룹핑 (슬롯별 별도 박스)
+          const groups = []
+          const seen = new Map()
+          scores.forEach(r => {
+            const key = r.test_slot ?? 0
+            if (!seen.has(key)) { seen.set(key, []); groups.push({ slot: key, name: r.test_name || '', rows: seen.get(key) }) }
+            seen.get(key).push(r)
+          })
+          groups.sort((a, b) => a.slot - b.slot)
+          return `
+            <div class="results-section-label">테스트 점수</div>
+            ${groups.map(g => `
+              <div class="results-test-box">
+                ${g.name ? `<div class="results-test-name">${g.name}</div>` : ''}
+                ${g.rows.filter(r => r.score !== null && r.score !== undefined).map(r => {
+                  const student = students.find(s => s.id === r.student_id)
+                  const grade = scoreToGrade(r.score)
+                  return `
+                    <div class="results-score-row">
+                      <span class="results-score-name">${student?.name || '?'}</span>
+                      <span class="results-score-val">${r.score}점</span>
+                      <span class="score-grade ${grade}">${grade}</span>
+                    </div>
+                  `
+                }).join('')}
               </div>
-            `
-          }).join('')}
-        ` : ''}
+            `).join('')}
+          `
+        })() : ''}
       </div>
     `
   }).join('')

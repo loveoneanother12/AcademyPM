@@ -252,6 +252,72 @@ function getSummary(classId, students) {
   return { present, late, absent }
 }
 
+function renderTestSlotHTML(cls, students, slot) {
+  const ss = `${cls.id}-${slot}`
+  return `
+    <div class="test-slot-panel" data-slot="${slot}" id="test-slot-${ss}">
+      ${slot > 0 ? `<div style="margin:10px 0 4px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px">테스트 ${slot + 1}</div>` : ''}
+      <div class="test-no-exam-row">
+        <input class="form-input test-name-input" type="text" id="test-name-${ss}" placeholder="테스트명을 입력해주세요" />
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0">
+          <span style="font-size:10px;color:var(--text3)">미실시</span>
+          <button class="toggle-btn" id="no-exam-toggle-${ss}" data-active="false">
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+      </div>
+      <div class="score-mode-ab" id="score-mode-ab-${ss}">
+        <button class="ab-opt active" data-mode="fraction" id="ab-fraction-${ss}">문항수</button>
+        <button class="ab-opt" data-mode="score" id="ab-score-${ss}">점수</button>
+      </div>
+      <div id="test-inputs-${ss}">
+        ${students.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:4px 0">수강생이 없습니다</div>' :
+          students.map(s => {
+            const sid = typeof s === 'object' ? s.id : s
+            const student = typeof s === 'object' ? s : { id: sid, name: '?' }
+            const isNa = attendanceCache[cls.id]?.[sid]?.is_na || false
+            return `
+              <div class="test-student-row">
+                <div class="test-student-name">${student.name}</div>
+                <div class="test-input-area" id="test-input-area-${ss}-${sid}">
+                  <div class="fraction-mode-wrap" id="frac-wrap-${ss}-${sid}">
+                    <input class="frac-input" type="text" inputmode="numeric"
+                      placeholder="${isNa ? '-' : '맞춘'}"
+                      id="frac-c-${ss}-${sid}"
+                      data-class-id="${cls.id}" data-student-id="${sid}" data-slot="${slot}"
+                      ${isNa ? 'disabled' : ''} />
+                    <span class="frac-sep">/</span>
+                    <input class="frac-input" type="text" inputmode="numeric"
+                      placeholder="${isNa ? '-' : '전체'}"
+                      id="frac-t-${ss}-${sid}"
+                      data-class-id="${cls.id}" data-student-id="${sid}" data-slot="${slot}"
+                      ${isNa ? 'disabled' : ''} />
+                  </div>
+                  <div class="score-mode-wrap" id="score-wrap-${ss}-${sid}" style="display:none">
+                    <input class="test-score-input" type="text" inputmode="numeric"
+                      placeholder="${isNa ? '해당없음' : '점수'}" value=""
+                      id="score-${ss}-${sid}"
+                      data-class-id="${cls.id}" data-student-id="${sid}" data-slot="${slot}"
+                      ${isNa ? 'disabled' : ''} />
+                  </div>
+                  <div class="test-skip-label" id="test-skip-label-${ss}-${sid}" style="display:none">해당없음</div>
+                </div>
+                <div class="score-grade ${isNa ? 'none' : 'none'}" id="grade-${ss}-${sid}">-</div>
+                <button class="toggle-btn toggle-btn-sm ${isNa ? '' : 'active'} test-skip-toggle"
+                  id="test-skip-${ss}-${sid}"
+                  data-class-id="${cls.id}" data-student-id="${sid}" data-slot="${slot}"
+                  data-active="${isNa ? 'false' : 'true'}">
+                  <span class="toggle-knob"></span>
+                </button>
+              </div>
+            `
+          }).join('')
+        }
+      </div>
+    </div>
+  `
+}
+
 function accordionHTML(cls) {
   const students = cls.students || []
   const { present, late, absent } = getSummary(cls.id, students)
@@ -300,33 +366,8 @@ function accordionHTML(cls) {
 
           <!-- 테스트 결과 패널 -->
           <div class="panel" id="panel-test-${cls.id}">
-            <div class="test-no-exam-row">
-              <span>테스트 미실시</span>
-              <button class="toggle-btn" id="no-exam-toggle-${cls.id}" data-active="false">
-                <span class="toggle-knob"></span>
-              </button>
-            </div>
-            <div id="test-inputs-${cls.id}">
-              ${students.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:4px 0">수강생이 없습니다</div>' :
-                students.map(s => {
-                  const sid = typeof s === 'object' ? s.id : s
-                  const student = typeof s === 'object' ? s : { id: sid, name: '?' }
-                  const score = testScoreCache[cls.id]?.[sid] ?? ''
-                  const grade = scoreToGrade(score)
-                  const isNa = attendanceCache[cls.id]?.[sid]?.is_na || false
-                  return `
-                    <div class="test-student-row">
-                      <div class="test-student-name">${student.name}</div>
-                      <input class="test-score-input" type="text" inputmode="numeric"
-                        placeholder="${isNa ? '해당없음' : '점수'}" value="${!isNa && score !== '' ? score : ''}"
-                        id="score-${cls.id}-${sid}" data-class-id="${cls.id}" data-student-id="${sid}"
-                        ${isNa ? 'disabled' : ''} />
-                      <div class="score-grade ${isNa ? 'none' : grade}" id="grade-${cls.id}-${sid}">${isNa ? '-' : grade}</div>
-                    </div>
-                  `
-                }).join('')
-              }
-            </div>
+            ${renderTestSlotHTML(cls, students, 0)}
+            <button class="btn btn-secondary btn-sm" id="test-add-slot-${cls.id}" style="margin-top:10px;width:100%">+ 테스트 추가</button>
           </div>
           <div class="test-save-bar" id="test-save-bar-${cls.id}">
             <button class="btn btn-primary btn-sm" id="test-save-${cls.id}">저장</button>
@@ -454,20 +495,54 @@ async function loadPanelData(classId) {
     }
   }
 
-  // 테스트 점수 로드
+  // 테스트 점수 로드 (슬롯별)
   const scores = await getTestScores(currentDate, classId)
   if (!testScoreCache[classId]) testScoreCache[classId] = {}
+
+  const slotMap = new Map()
   scores.forEach(r => {
+    const slot = r.test_slot ?? 0
+    if (!slotMap.has(slot)) slotMap.set(slot, [])
+    slotMap.get(slot).push(r)
     testScoreCache[classId][r.student_id] = r.score
-    const input = document.getElementById(`score-${classId}-${r.student_id}`)
-    if (input) input.value = r.score
-    const gradeEl = document.getElementById(`grade-${classId}-${r.student_id}`)
-    if (gradeEl) {
-      const g = scoreToGrade(r.score)
-      gradeEl.textContent = g
-      gradeEl.className = `score-grade ${g}`
-    }
   })
+
+  const cls = allClasses.find(c => c.id === classId)
+  const clsStudents = cls?.students || []
+  const accordionItem = document.querySelector(`.accordion-item[data-class-id="${classId}"]`)
+  const addSlotBtn = document.getElementById(`test-add-slot-${classId}`)
+
+  const sortedSlots = [...slotMap.keys()].sort((a, b) => a - b)
+  for (const slot of sortedSlots) {
+    const ss = `${classId}-${slot}`
+    // 슬롯 1+ 는 동적 생성
+    if (slot > 0 && !document.getElementById(`test-slot-${ss}`)) {
+      const slotHTML = renderTestSlotHTML(cls, clsStudents, slot)
+      if (addSlotBtn) addSlotBtn.insertAdjacentHTML('beforebegin', slotHTML)
+      bindTestSlot(cls, slot, accordionItem)
+    }
+    // 값 채우기
+    const slotScores = slotMap.get(slot) || []
+    slotScores.forEach(r => {
+      const input = document.getElementById(`score-${ss}-${r.student_id}`)
+      if (input && r.score !== null && r.score !== undefined) input.value = r.score
+      const gradeEl = document.getElementById(`grade-${ss}-${r.student_id}`)
+      if (gradeEl) {
+        const g = scoreToGrade(r.score)
+        gradeEl.textContent = g === 'none' ? '-' : g
+        gradeEl.className = `score-grade ${g}`
+      }
+    })
+    // 테스트명 복원
+    const withName = slotScores.find(r => r.test_name)
+    if (withName) {
+      const nameInput = document.getElementById(`test-name-${ss}`)
+      if (nameInput) nameInput.value = withName.test_name
+    }
+    // 기존 점수 있으면 "점수" 모드로 전환
+    const hasScores = slotScores.some(r => r.score !== null && r.score !== undefined)
+    if (hasScores) document.getElementById(`ab-score-${ss}`)?.click()
+  }
 
   // 학생 메모 로드
   const studentMemos = await getStudentMemos(currentDate, classId)
@@ -477,6 +552,138 @@ async function loadPanelData(classId) {
     const ta = document.getElementById(`smemo-${classId}-${r.student_id}`)
     if (ta) ta.value = r.memo || ''
   })
+}
+
+function bindTestSlot(cls, slot, item) {
+  const classId = cls.id
+  const ss = `${classId}-${slot}`
+  const inputsWrap = document.getElementById(`test-inputs-${ss}`)
+
+  // A/B 모드 토글 (문항수 ↔ 점수)
+  const abFractionBtn = document.getElementById(`ab-fraction-${ss}`)
+  const abScoreBtn = document.getElementById(`ab-score-${ss}`)
+  if (abFractionBtn && abScoreBtn) {
+    function setScoreMode(mode) {
+      const isFraction = mode === 'fraction'
+      abFractionBtn.classList.toggle('active', isFraction)
+      abScoreBtn.classList.toggle('active', !isFraction)
+      if (inputsWrap) {
+        inputsWrap.querySelectorAll('.fraction-mode-wrap').forEach(el => el.style.display = isFraction ? '' : 'none')
+        inputsWrap.querySelectorAll('.score-mode-wrap').forEach(el => el.style.display = isFraction ? 'none' : '')
+      }
+    }
+    abFractionBtn.onclick = (e) => { e.stopPropagation(); setScoreMode('fraction') }
+    abScoreBtn.onclick = (e) => { e.stopPropagation(); setScoreMode('score') }
+  }
+
+  if (inputsWrap) {
+    // 개인별 테스트 미실시 토글
+    inputsWrap.querySelectorAll('.test-skip-toggle').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation()
+        const cid = btn.dataset.classId
+        const sid = btn.dataset.studentId
+        const sl = btn.dataset.slot
+        const slSuffix = `${cid}-${sl}`
+        const next = !(btn.dataset.active === 'true')
+        btn.dataset.active = String(next)
+        btn.classList.toggle('active', next)
+        btn.style.background = next ? 'var(--accent)' : 'var(--border)'
+
+        const fracWrap = document.getElementById(`frac-wrap-${slSuffix}-${sid}`)
+        const scoreWrap = document.getElementById(`score-wrap-${slSuffix}-${sid}`)
+        const skipLabel = document.getElementById(`test-skip-label-${slSuffix}-${sid}`)
+        const gradeEl = document.getElementById(`grade-${slSuffix}-${sid}`)
+
+        if (!next) {
+          if (fracWrap) fracWrap.style.display = 'none'
+          if (scoreWrap) scoreWrap.style.display = 'none'
+          if (skipLabel) skipLabel.style.display = ''
+          if (gradeEl) { gradeEl.textContent = '-'; gradeEl.className = 'score-grade none' }
+        } else {
+          const isFractionMode = document.getElementById(`ab-fraction-${slSuffix}`)?.classList.contains('active')
+          if (fracWrap) fracWrap.style.display = isFractionMode ? '' : 'none'
+          if (scoreWrap) scoreWrap.style.display = isFractionMode ? 'none' : ''
+          if (skipLabel) skipLabel.style.display = 'none'
+          const scoreInput = document.getElementById(`score-${slSuffix}-${sid}`)
+          if (scoreInput && scoreInput.value) {
+            const g = scoreToGrade(parseInt(scoreInput.value))
+            if (gradeEl) { gradeEl.textContent = g; gradeEl.className = `score-grade ${g}` }
+          } else {
+            if (gradeEl) { gradeEl.textContent = '-'; gradeEl.className = 'score-grade none' }
+          }
+        }
+      }
+    })
+
+    // 분수 입력 → 점수 자동 계산
+    inputsWrap.querySelectorAll('.frac-input').forEach(input => {
+      input.addEventListener('input', (e) => {
+        e.stopPropagation()
+        const sl = input.dataset.slot
+        const cid = input.dataset.classId
+        const sid = input.dataset.studentId
+        const slSuffix = `${cid}-${sl}`
+        const cEl = document.getElementById(`frac-c-${slSuffix}-${sid}`)
+        const tEl = document.getElementById(`frac-t-${slSuffix}-${sid}`)
+        const scoreEl = document.getElementById(`score-${slSuffix}-${sid}`)
+        const gradeEl = document.getElementById(`grade-${slSuffix}-${sid}`)
+        if (!cEl || !tEl) return
+        const correct = parseInt(cEl.value)
+        const total = parseInt(tEl.value)
+        if (!isNaN(correct) && !isNaN(total) && total > 0) {
+          const score = Math.round(correct / total * 100)
+          if (scoreEl) scoreEl.value = Math.min(100, Math.max(0, score))
+          const g = scoreToGrade(score)
+          if (gradeEl) { gradeEl.textContent = g === 'none' ? '-' : g; gradeEl.className = `score-grade ${g}` }
+        } else {
+          if (scoreEl) scoreEl.value = ''
+          if (gradeEl) { gradeEl.textContent = '-'; gradeEl.className = 'score-grade none' }
+        }
+      })
+      input.addEventListener('click', (e) => e.stopPropagation())
+    })
+
+    // 점수 직접 입력 → grade 실시간 표시
+    inputsWrap.querySelectorAll('.test-score-input').forEach(input => {
+      input.addEventListener('input', (e) => {
+        e.stopPropagation()
+        let val = parseInt(input.value)
+        if (isNaN(val)) val = ''
+        else val = Math.max(0, Math.min(100, val))
+        if (val !== '') input.value = val
+        const sl = input.dataset.slot
+        const cid = input.dataset.classId
+        const sid = input.dataset.studentId
+        const gradeEl = document.getElementById(`grade-${cid}-${sl}-${sid}`)
+        if (gradeEl) {
+          const g = scoreToGrade(val)
+          gradeEl.textContent = g === 'none' ? '-' : g
+          gradeEl.className = `score-grade ${g}`
+        }
+      })
+      input.addEventListener('click', (e) => e.stopPropagation())
+    })
+  }
+
+  // 전체 미실시 토글
+  const noExamToggle = document.getElementById(`no-exam-toggle-${ss}`)
+  if (noExamToggle) {
+    noExamToggle.onclick = (e) => {
+      e.stopPropagation()
+      const next = !(noExamToggle.dataset.active === 'true')
+      noExamToggle.dataset.active = String(next)
+      noExamToggle.classList.toggle('active', next)
+      if (inputsWrap) {
+        inputsWrap.querySelectorAll('.test-score-input, .frac-input').forEach(inp => { inp.disabled = next })
+        inputsWrap.querySelectorAll('.test-skip-toggle').forEach(btn => {
+          btn.style.background = next ? 'var(--border)' : (btn.dataset.active === 'true' ? 'var(--accent)' : 'var(--border)')
+        })
+      }
+      const testSaveBtn = document.getElementById(`test-save-${classId}`)
+      if (testSaveBtn) testSaveBtn.disabled = next
+    }
+  }
 }
 
 function bindClassAccordion(cls) {
@@ -534,43 +741,24 @@ function bindClassAccordion(cls) {
     }
   }
 
-  // 테스트 점수 입력 (grade 실시간 표시)
-  item.querySelectorAll('.test-score-input').forEach(input => {
-    input.addEventListener('input', (e) => {
-      e.stopPropagation()
-      let val = parseInt(input.value)
-      if (isNaN(val)) val = ''
-      else val = Math.max(0, Math.min(100, val))
-      if (val !== '') input.value = val
-      const g = scoreToGrade(val)
-      const gradeEl = document.getElementById(`grade-${input.dataset.classId}-${input.dataset.studentId}`)
-      if (gradeEl) {
-        gradeEl.textContent = g === 'none' ? '-' : g
-        gradeEl.className = `score-grade ${g}`
-      }
-    })
-    input.addEventListener('click', (e) => e.stopPropagation())
-  })
+  // 슬롯 0 바인딩
+  bindTestSlot(cls, 0, item)
 
-  // 테스트 미실시 토글
-  const noExamToggle = document.getElementById(`no-exam-toggle-${classId}`)
-  if (noExamToggle) {
-    noExamToggle.onclick = (e) => {
+  // 테스트 추가 버튼
+  const addSlotBtn = document.getElementById(`test-add-slot-${classId}`)
+  if (addSlotBtn) {
+    addSlotBtn.onclick = (e) => {
       e.stopPropagation()
-      const nowActive = noExamToggle.dataset.active === 'true'
-      const next = !nowActive
-      noExamToggle.dataset.active = String(next)
-      noExamToggle.classList.toggle('active', next)
-      const inputsWrap = document.getElementById(`test-inputs-${classId}`)
-      if (inputsWrap) {
-        inputsWrap.querySelectorAll('.test-score-input').forEach(inp => { inp.disabled = next })
-      }
-      const testSaveBtn = document.getElementById(`test-save-${classId}`)
-      if (testSaveBtn) testSaveBtn.disabled = next
+      const testPanel = document.getElementById(`panel-test-${classId}`)
+      const existingCount = testPanel ? testPanel.querySelectorAll('.test-slot-panel').length : 1
+      const newSlot = existingCount
+      const slotHTML = renderTestSlotHTML(cls, cls.students || [], newSlot)
+      addSlotBtn.insertAdjacentHTML('beforebegin', slotHTML)
+      bindTestSlot(cls, newSlot, item)
     }
   }
 
-  // 테스트 결과 저장 버튼
+  // 테스트 결과 저장 버튼 (전체 슬롯)
   const testSaveBtn = document.getElementById(`test-save-${classId}`)
   if (testSaveBtn) {
     testSaveBtn.onclick = async (e) => {
@@ -579,15 +767,28 @@ function bindClassAccordion(cls) {
       testSaveBtn.textContent = '저장 중...'
       try {
         const students = cls.students || []
-        for (const s of students) {
-          const sid = typeof s === 'object' ? s.id : s
-          const input = document.getElementById(`score-${classId}-${sid}`)
-          if (!input) continue
-          const val = input.value === '' ? null : parseInt(input.value)
-          if (val !== null && (val < 0 || val > 100)) continue
-          await upsertTestScore(currentDate, classId, sid, val)
-          if (!testScoreCache[classId]) testScoreCache[classId] = {}
-          testScoreCache[classId][sid] = val
+        const testPanel = document.getElementById(`panel-test-${classId}`)
+        const slotPanels = testPanel ? testPanel.querySelectorAll('.test-slot-panel') : []
+        for (const slotPanel of slotPanels) {
+          const slot = parseInt(slotPanel.dataset.slot)
+          const ss = `${classId}-${slot}`
+          const testName = document.getElementById(`test-name-${ss}`)?.value.trim() || null
+          const isNoExam = document.getElementById(`no-exam-toggle-${ss}`)?.dataset.active === 'true'
+          for (const s of students) {
+            const sid = typeof s === 'object' ? s.id : s
+            if (isNoExam) {
+              await upsertTestScore(currentDate, classId, sid, null, testName, slot)
+              continue
+            }
+            const skipToggle = document.getElementById(`test-skip-${ss}-${sid}`)
+            const isSkipped = skipToggle?.dataset.active === 'false'
+            const input = document.getElementById(`score-${ss}-${sid}`)
+            const val = isSkipped ? null : (input?.value === '' ? null : parseInt(input?.value))
+            if (!isSkipped && val !== null && (val < 0 || val > 100)) continue
+            await upsertTestScore(currentDate, classId, sid, val, testName, slot)
+            if (!testScoreCache[classId]) testScoreCache[classId] = {}
+            testScoreCache[classId][sid] = val
+          }
         }
         showToast('테스트 결과 저장 완료', 'success')
       } catch (err) {
@@ -672,11 +873,19 @@ function bindClassAccordion(cls) {
         if (memo) memo.disabled = isNa
       }
 
-      // 테스트 패널 입력 비활성화/활성화
-      const scoreInput = document.getElementById(`score-${cid}-${sid}`)
-      if (scoreInput) {
-        scoreInput.disabled = isNa
-        scoreInput.placeholder = isNa ? '해당없음' : '점수'
+      // 테스트 패널 입력 비활성화/활성화 (모든 슬롯)
+      const testPanel = document.getElementById(`panel-test-${cid}`)
+      if (testPanel) {
+        testPanel.querySelectorAll('.test-slot-panel').forEach(slotPanel => {
+          const sl = slotPanel.dataset.slot
+          const slSuffix = `${cid}-${sl}`
+          const scoreInput = document.getElementById(`score-${slSuffix}-${sid}`)
+          if (scoreInput) { scoreInput.disabled = isNa; scoreInput.placeholder = isNa ? '해당없음' : '점수' }
+          const fracC = document.getElementById(`frac-c-${slSuffix}-${sid}`)
+          const fracT = document.getElementById(`frac-t-${slSuffix}-${sid}`)
+          if (fracC) { fracC.disabled = isNa; fracC.placeholder = isNa ? '-' : '맞춘' }
+          if (fracT) { fracT.disabled = isNa; fracT.placeholder = isNa ? '-' : '전체' }
+        })
       }
 
       const memo = document.getElementById(`smemo-${cid}-${sid}`)
