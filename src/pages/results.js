@@ -160,9 +160,15 @@ async function loadResults() {
     getAttendance(currentDate),
   ])
 
-  // 선택된 요일의 수업만 필터
+  // 선택된 요일의 수업만 필터 (기간 제한도 적용)
   const dow = DAY_LABELS[new Date(currentDate + 'T00:00:00').getDay()]
-  const dayClasses = classes.filter(cls => (cls.days || []).includes(dow))
+  const dayClasses = classes.filter(cls => {
+    if (cls.is_oneday) return cls.start_date === currentDate
+    if (!(cls.days || []).includes(dow)) return false
+    if (cls.start_date && currentDate < cls.start_date) return false
+    if (cls.end_date && currentDate > cls.end_date) return false
+    return true
+  })
 
   // 출석 데이터 있는 수업만 표시 (없으면 해당 요일 전체)
   const attClassIds = new Set(attRows.map(r => r.class_id))

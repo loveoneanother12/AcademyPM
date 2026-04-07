@@ -1051,6 +1051,11 @@ body {
   overflow: hidden;
 }
 
+.accordion-item--oneday {
+  background: #221620;
+  border-color: #37212e;
+}
+
 .accordion-header {
   display: flex;
   align-items: center;
@@ -1206,6 +1211,42 @@ body {
   padding-bottom: 10px;
   margin-bottom: 10px;
   border-bottom: 1px solid var(--border);
+}
+
+.test-slot-panel {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.test-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.test-slot-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.test-slot-delete-btn {
+  font-size: 11px;
+  color: var(--red);
+  background: none;
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.test-slot-delete-btn:active {
+  opacity: 1;
 }
 
 .test-no-exam-row {
@@ -1609,6 +1650,23 @@ body {
   display: none;
 }
 
+.od-calendar-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.od-calendar-popup.hidden {
+  display: none;
+}
+
 @keyframes cal-in {
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -1990,6 +2048,18 @@ body {
 }
 
 .detail-action-row .btn {
+  flex: 1;
+}
+
+.oneday-action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.oneday-action-row .btn {
   flex: 1;
 }
 

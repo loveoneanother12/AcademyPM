@@ -135,7 +135,15 @@ alter table attendance add column if not exists is_na       boolean default fals
 alter table student_tokens drop constraint if exists student_tokens_student_id_key;
 alter table test_scores    add column if not exists test_name text;
 
+-- 단발성 수업
+alter table classes add column if not exists is_oneday boolean default false;
+
+-- 단기 기간 설정 (start_date/end_date)
+alter table classes add column if not exists start_date date;
+alter table classes add column if not exists end_date   date;
+
 -- 하루에 테스트 여러 번 지원 (test_slot)
 alter table test_scores    add column if not exists test_slot integer default 0;
 alter table test_scores    drop constraint if exists test_scores_date_class_id_student_id_key;
+alter table test_scores    drop constraint if exists test_scores_unique_slot;
 alter table test_scores    add constraint test_scores_unique_slot unique(date, class_id, student_id, test_slot);

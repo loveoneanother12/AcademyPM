@@ -4,6 +4,7 @@
 
 import {
   getClasses,
+  getStudents,
   getAttendance,
   getClassMemo,
   getTestScores,
@@ -12,12 +13,18 @@ import {
   upsertClassMemo,
   upsertTestScore,
   upsertStudentMemo,
+  insertRow,
+  updateRow,
+  deleteRow,
+  syncClassStudents,
 } from '../api.js'
+import { openModal, closeModal } from '../components/modal.js'
 import { showToast } from '../components/toast.js'
 import { isOnline } from '../lib/supabase.js'
 
 let currentDate = new Date().toLocaleDateString('sv-KR')
 let allClasses = []
+let allStudents = []
 let attendanceCache = {}   // classId → { studentId → {status, homework_pct} }
 let memoCache = {}         // classId → memo string
 let testScoreCache = {}    // classId → { studentId → score }
@@ -58,9 +65,15 @@ export async function renderAttendancePage(container) {
     ${isOnline ? '' : '<div class="offline-banner" style="margin:0 16px 8px">오프라인 모드 — 샘플 데이터</div>'}
   `
 
-  // FAB 제거
-  const fab = document.querySelector('.fab')
-  if (fab) fab.remove()
+  // FAB — 단발성 수업 추가
+  let fab = document.querySelector('.fab')
+  if (!fab) {
+    fab = document.createElement('button')
+    fab.className = 'fab'
+    fab.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
+    document.body.appendChild(fab)
+  }
+  fab.onclick = () => openOnedayClassModal()
 
   attSearchQuery = ''
 
@@ -164,7 +177,7 @@ async function loadAttendanceData() {
   testScoreCache = {}
   studentMemoCache = {}
 
-  allClasses = await getClasses()
+  ;[allClasses, allStudents] = await Promise.all([getClasses(), getStudents()])
 
   // 현재 날짜의 출석 데이터 전체 로드
   const attRows = await getAttendance(currentDate)
@@ -196,7 +209,13 @@ function renderAccordionList() {
   }
 
   const dow = DAY_LABELS[new Date(currentDate + 'T00:00:00').getDay()]
-  const todayClasses = allClasses.filter(cls => (cls.days || []).includes(dow))
+  const todayClasses = allClasses.filter(cls => {
+    if (cls.is_oneday) return cls.start_date === currentDate
+    if (!(cls.days || []).includes(dow)) return false
+    if (cls.start_date && currentDate < cls.start_date) return false
+    if (cls.end_date && currentDate > cls.end_date) return false
+    return true
+  })
 
   if (todayClasses.length === 0) {
     list.innerHTML = `
@@ -256,15 +275,19 @@ function renderTestSlotHTML(cls, students, slot) {
   const ss = `${cls.id}-${slot}`
   return `
     <div class="test-slot-panel" data-slot="${slot}" id="test-slot-${ss}">
-      ${slot > 0 ? `<div style="margin:10px 0 4px;font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px">테스트 ${slot + 1}</div>` : ''}
+      <div class="test-slot-header">
+        <span class="test-slot-label">${slot === 0 ? '테스트' : `테스트 ${slot + 1}`}</span>
+        ${slot > 0 ? `<button class="test-slot-delete-btn" id="test-slot-delete-${ss}" data-slot="${slot}" data-class-id="${cls.id}">삭제</button>` : ''}
+      </div>
       <div class="test-no-exam-row">
         <input class="form-input test-name-input" type="text" id="test-name-${ss}" placeholder="테스트명을 입력해주세요" />
+        ${slot === 0 ? `
         <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0">
           <span style="font-size:10px;color:var(--text3)">미실시</span>
           <button class="toggle-btn" id="no-exam-toggle-${ss}" data-active="false">
             <span class="toggle-knob"></span>
           </button>
-        </div>
+        </div>` : ''}
       </div>
       <div class="score-mode-ab" id="score-mode-ab-${ss}">
         <button class="ab-opt active" data-mode="fraction" id="ab-fraction-${ss}">문항수</button>
@@ -324,7 +347,7 @@ function accordionHTML(cls) {
   const hasMemo = !!memoCache[cls.id]
 
   return `
-    <div class="accordion-item" data-class-id="${cls.id}">
+    <div class="accordion-item${cls.is_oneday ? ' accordion-item--oneday' : ''}" data-class-id="${cls.id}">
       <div class="accordion-header">
         <div class="accordion-title-group">
           <div class="accordion-class-name">${cls.name}</div>
@@ -382,6 +405,14 @@ function accordionHTML(cls) {
           <div class="att-save-bar" id="att-save-bar-${cls.id}">
             <button class="btn btn-primary btn-sm" id="att-save-${cls.id}">저장</button>
           </div>
+
+          ${cls.is_oneday ? `
+          <!-- 단발 수업 수정/삭제 -->
+          <div class="oneday-action-row" id="oneday-actions-${cls.id}">
+            <button class="btn btn-secondary btn-sm" id="oneday-edit-${cls.id}">수정</button>
+            <button class="btn btn-danger btn-sm" id="oneday-delete-${cls.id}">삭제</button>
+          </div>
+          ` : ''}
         </div>
       </div>
     </div>
@@ -558,6 +589,16 @@ function bindTestSlot(cls, slot, item) {
   const classId = cls.id
   const ss = `${classId}-${slot}`
   const inputsWrap = document.getElementById(`test-inputs-${ss}`)
+
+  // 슬롯 삭제 버튼 (slot > 0 만 존재)
+  const deleteBtn = document.getElementById(`test-slot-delete-${ss}`)
+  if (deleteBtn) {
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation()
+      const slotPanel = document.getElementById(`test-slot-${ss}`)
+      if (slotPanel) slotPanel.remove()
+    }
+  }
 
   // A/B 모드 토글 (문항수 ↔ 점수)
   const abFractionBtn = document.getElementById(`ab-fraction-${ss}`)
@@ -927,6 +968,31 @@ function bindClassAccordion(cls) {
       }
     }
   }
+
+  // 단발 수업 수정/삭제
+  if (cls.is_oneday) {
+    const editBtn = document.getElementById(`oneday-edit-${classId}`)
+    if (editBtn) {
+      editBtn.onclick = (e) => {
+        e.stopPropagation()
+        openOnedayClassModal(cls)
+      }
+    }
+    const deleteBtn = document.getElementById(`oneday-delete-${classId}`)
+    if (deleteBtn) {
+      deleteBtn.onclick = async (e) => {
+        e.stopPropagation()
+        if (!confirm(`'${cls.name}' 단발 수업을 삭제하시겠습니까?\n관련 출결/메모/점수 기록도 모두 삭제됩니다.`)) return
+        try {
+          await deleteRow('classes', classId)
+          showToast('삭제되었습니다', 'success')
+          await loadAttendanceData()
+        } catch (err) {
+          showToast('삭제 실패', 'error')
+        }
+      }
+    }
+  }
 }
 
 function updateSummaryPill(classId) {
@@ -1048,4 +1114,306 @@ function renderCalendar(popup) {
   }
 
   render()
+}
+
+// ========================================
+// 단발성 수업 캘린더 (모달 내부용)
+// ========================================
+
+function renderOnedayCalendar(containerId, selectedDate, onSelect) {
+  const container = document.getElementById(containerId)
+  if (!container) return
+
+  const init = new Date((selectedDate || currentDate) + 'T00:00:00')
+  let viewYear = init.getFullYear()
+  let viewMonth = init.getMonth()
+  let picked = selectedDate || ''
+
+  function render() {
+    const today = new Date().toLocaleDateString('sv-KR')
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay()
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+
+    const cells = []
+    for (let i = 0; i < firstDay; i++) cells.push('<div class="cal-day"></div>')
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      cells.push(`
+        <div class="cal-day ${picked === dateStr ? 'selected' : ''} ${dateStr === today ? 'today' : ''}"
+          data-date="${dateStr}">${d}</div>
+      `)
+    }
+
+    container.innerHTML = `
+      <div class="cal-header">
+        <button class="cal-nav-btn" id="od-cal-prev">◀</button>
+        <span class="cal-month-label">${viewYear}년 ${viewMonth + 1}월</span>
+        <button class="cal-nav-btn" id="od-cal-next">▶</button>
+      </div>
+      <div class="cal-week-labels">
+        ${['일','월','화','수','목','금','토'].map(d => `<div class="cal-week-label">${d}</div>`).join('')}
+      </div>
+      <div class="cal-grid">${cells.join('')}</div>
+    `
+
+    container.querySelector('#od-cal-prev').onclick = (e) => {
+      e.stopPropagation()
+      viewMonth--
+      if (viewMonth < 0) { viewMonth = 11; viewYear-- }
+      render()
+    }
+    container.querySelector('#od-cal-next').onclick = (e) => {
+      e.stopPropagation()
+      viewMonth++
+      if (viewMonth > 11) { viewMonth = 0; viewYear++ }
+      render()
+    }
+    container.querySelectorAll('.cal-day[data-date]').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation()
+        picked = el.dataset.date
+        onSelect(picked)
+        render()
+      }
+    })
+  }
+
+  render()
+}
+
+// ========================================
+// 단발성 수업 추가/수정 모달
+// ========================================
+
+const SUBJECTS_OD = ['수학', '영어', '국어', '과학']
+
+function buildOnedayFormHTML(cls = null) {
+  const c = cls || {}
+  return `
+    <h2 class="modal-title">${cls ? '단회성 수업, 보강 수정' : '단회성 수업, 보강 추가'}</h2>
+    <div class="form-group">
+      <label class="form-label">수업명 *</label>
+      <input class="form-input" id="od-name" type="text" placeholder="수업명" value="${c.name || ''}" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">과목</label>
+      <div class="subject-selector" id="od-subjects">
+        ${SUBJECTS_OD.map(sub => `
+          <button class="subject-toggle ${c.subject === sub ? 'selected' : ''}" data-subject="${sub}">${sub}</button>
+        `).join('')}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">담당 강사</label>
+        <input class="form-input" id="od-teacher" type="text" placeholder="강사명" value="${c.teacher || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">수업 시간</label>
+        <input class="form-input" id="od-time" type="text" placeholder="예: 20-22" value="${c.time || ''}" />
+      </div>
+    </div>
+    <div class="form-group">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${c.sub_teacher ? '8px' : '0'}">
+        <label class="form-label" style="margin-bottom:0">보조강사</label>
+        <button class="toggle-btn ${c.sub_teacher ? 'active' : ''}" id="od-sub-teacher-toggle" data-active="${c.sub_teacher ? 'true' : 'false'}">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+      <div id="od-sub-teacher-wrap" style="display:${c.sub_teacher ? 'block' : 'none'}">
+        <input class="form-input" id="od-sub-teacher" type="text" placeholder="보조강사명" value="${c.sub_teacher || ''}" />
+      </div>
+    </div>
+    <div class="form-group" style="position:relative">
+      <label class="form-label">수업 날짜 *</label>
+      <button class="form-input" id="od-date-btn" style="text-align:left;cursor:pointer;color:${c.start_date ? 'var(--text)' : 'var(--text3)'}">${c.start_date || '날짜를 선택하세요'}</button>
+      <div id="od-calendar-popup" class="od-calendar-popup hidden"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">수업 상세 메모 (교재, 진도 등)</label>
+      <textarea class="form-textarea" id="od-detail-memo" placeholder="교재명, 현재 진도, 특이사항...">${c.detail_memo || ''}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">수강생</label>
+      <div class="selected-student-tags" id="od-selected-tags"></div>
+      <input class="form-input" id="od-student-search" type="text" placeholder="이름, 학교, 학년 검색..." />
+      <div id="od-student-results"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" id="od-cancel">취소</button>
+      <button class="btn btn-primary" id="od-submit">${cls ? '저장' : '추가'}</button>
+    </div>
+  `
+}
+
+function setupOnedayForm(cls = null) {
+  let pickedDate = cls?.start_date || ''
+  const classStudentIds = (cls?.students || []).map(s => (typeof s === 'object' ? s.id : s))
+  let selectedStudentIds = new Set(classStudentIds)
+  const activeStudents = allStudents.filter(s => s.status !== 'inactive')
+
+  // 보조강사 토글
+  const subTeacherToggle = document.getElementById('od-sub-teacher-toggle')
+  if (subTeacherToggle) {
+    subTeacherToggle.onclick = (e) => {
+      e.stopPropagation()
+      const next = subTeacherToggle.dataset.active !== 'true'
+      subTeacherToggle.dataset.active = String(next)
+      subTeacherToggle.classList.toggle('active', next)
+      const wrap = document.getElementById('od-sub-teacher-wrap')
+      wrap.style.display = next ? 'block' : 'none'
+      subTeacherToggle.closest('.form-group').querySelector('div').style.marginBottom = next ? '8px' : '0'
+    }
+  }
+
+  // 날짜 팝업 캘린더
+  const dateBtn = document.getElementById('od-date-btn')
+  const calPopup = document.getElementById('od-calendar-popup')
+  let calOpen = false
+
+  function openCal() {
+    calOpen = true
+    calPopup.classList.remove('hidden')
+    renderOnedayCalendar('od-calendar-popup', pickedDate || currentDate, (d) => {
+      pickedDate = d
+      dateBtn.textContent = d
+      dateBtn.style.color = 'var(--text)'
+      calOpen = false
+      calPopup.classList.add('hidden')
+    })
+    setTimeout(() => {
+      document.addEventListener('click', closeCal, { once: true })
+    }, 50)
+  }
+
+  function closeCal(e) {
+    if (calPopup && e && calPopup.contains(e.target)) {
+      document.addEventListener('click', closeCal, { once: true })
+      return
+    }
+    calOpen = false
+    calPopup?.classList.add('hidden')
+  }
+
+  dateBtn.onclick = (e) => {
+    e.stopPropagation()
+    if (calOpen) { closeCal(null) } else { openCal() }
+  }
+
+  // 과목 선택
+  document.querySelectorAll('#od-subjects .subject-toggle').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation()
+      document.querySelectorAll('#od-subjects .subject-toggle').forEach(b => b.classList.remove('selected'))
+      btn.classList.add('selected')
+    }
+  })
+
+  // 수강생 선택
+  function renderSelectedTags() {
+    const wrap = document.getElementById('od-selected-tags')
+    if (!wrap) return
+    wrap.innerHTML = [...selectedStudentIds].map(id => {
+      const s = allStudents.find(st => st.id === id)
+      if (!s) return ''
+      return `<span class="selected-student-tag" data-id="${s.id}">${s.name}<button class="tag-remove" data-id="${s.id}">×</button></span>`
+    }).join('')
+    wrap.querySelectorAll('.tag-remove').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation()
+        selectedStudentIds.delete(btn.dataset.id)
+        renderSelectedTags()
+        renderSearchResults(document.getElementById('od-student-search')?.value.toLowerCase() || '')
+      }
+    })
+  }
+
+  function renderSearchResults(q) {
+    const resultsEl = document.getElementById('od-student-results')
+    if (!resultsEl) return
+    if (!q) { resultsEl.innerHTML = ''; return }
+    const matched = activeStudents.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      (s.school || '').toLowerCase().includes(q) ||
+      (s.grade || '').toLowerCase().includes(q)
+    )
+    if (matched.length === 0) {
+      resultsEl.innerHTML = `<div class="student-search-results"><div style="padding:10px;font-size:13px;color:var(--text3)">검색 결과 없음</div></div>`
+      return
+    }
+    resultsEl.innerHTML = `<div class="student-search-results">${matched.map(s => `
+      <div class="student-result-item ${selectedStudentIds.has(s.id) ? 'already-selected' : ''}" data-id="${s.id}">
+        <div>
+          <div class="student-check-name">${s.name}</div>
+          <div class="student-check-meta">${s.grade || ''}${s.grade && s.school ? ' · ' : ''}${s.school || ''}</div>
+        </div>
+      </div>
+    `).join('')}</div>`
+    resultsEl.querySelectorAll('.student-result-item:not(.already-selected)').forEach(item => {
+      item.onclick = (e) => {
+        e.stopPropagation()
+        selectedStudentIds.add(item.dataset.id)
+        renderSelectedTags()
+        renderSearchResults(document.getElementById('od-student-search')?.value.toLowerCase() || '')
+      }
+    })
+  }
+
+  renderSelectedTags()
+  document.getElementById('od-student-search').addEventListener('input', e => {
+    e.stopPropagation()
+    renderSearchResults(e.target.value.toLowerCase())
+  })
+
+  document.getElementById('od-cancel').onclick = closeModal
+
+  document.getElementById('od-submit').onclick = async () => {
+    const name = document.getElementById('od-name').value.trim()
+    if (!name) { showToast('수업명을 입력하세요', 'error'); return }
+    if (!pickedDate) { showToast('날짜를 선택하세요', 'error'); return }
+
+    const subject = document.querySelector('#od-subjects .subject-toggle.selected')?.dataset.subject || ''
+    const studentIds = [...selectedStudentIds]
+    const isSubTeacher = document.getElementById('od-sub-teacher-toggle')?.dataset.active === 'true'
+
+    const data = {
+      name,
+      teacher: document.getElementById('od-teacher').value.trim(),
+      time: document.getElementById('od-time').value.trim(),
+      subject,
+      sub_teacher: isSubTeacher ? (document.getElementById('od-sub-teacher')?.value.trim() || null) : null,
+      detail_memo: document.getElementById('od-detail-memo').value.trim(),
+      is_oneday: true,
+      start_date: pickedDate,
+      end_date: pickedDate,
+      days: [],
+    }
+
+    const btn = document.getElementById('od-submit')
+    btn.disabled = true
+    btn.textContent = '저장 중...'
+
+    try {
+      if (cls) {
+        await updateRow('classes', cls.id, data)
+        await syncClassStudents(cls.id, studentIds)
+        showToast('수정되었습니다', 'success')
+      } else {
+        const newCls = await insertRow('classes', data)
+        await syncClassStudents(newCls.id, studentIds)
+        showToast('단발 수업이 추가되었습니다', 'success')
+      }
+      closeModal()
+      await loadAttendanceData()
+    } catch (e) {
+      showToast('저장 실패: ' + e.message, 'error')
+      btn.disabled = false
+      btn.textContent = cls ? '저장' : '추가'
+    }
+  }
+}
+
+function openOnedayClassModal(cls = null) {
+  openModal(buildOnedayFormHTML(cls), null)
+  setupOnedayForm(cls)
 }

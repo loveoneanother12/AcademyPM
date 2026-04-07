@@ -77,9 +77,11 @@ function renderClassList() {
   }
 
   const filtered = allClasses.filter(cls =>
-    cls.name.toLowerCase().includes(searchQuery) ||
-    (cls.teacher || '').toLowerCase().includes(searchQuery) ||
-    (cls.subject || '').toLowerCase().includes(searchQuery)
+    !cls.is_oneday && (
+      cls.name.toLowerCase().includes(searchQuery) ||
+      (cls.teacher || '').toLowerCase().includes(searchQuery) ||
+      (cls.subject || '').toLowerCase().includes(searchQuery)
+    )
   )
 
   if (filtered.length === 0) {
@@ -151,6 +153,7 @@ async function openClassDetailModal(cls) {
           <span style="font-size:12px;color:var(--text2)">${cls.teacher || ''}</span>
           ${cls.sub_teacher ? `<span style="font-size:12px;color:var(--text3)">${cls.sub_teacher} (보조)</span>` : ''}
           ${cls.is_clinic ? '<span class="clinic-badge">클리닉</span>' : ''}
+          ${cls.start_date && cls.end_date ? `<span style="font-size:11px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:6px">${cls.start_date} ~ ${cls.end_date}</span>` : ''}
         </div>
       </div>
     </div>
@@ -296,6 +299,30 @@ function buildClassFormHTML(mode, cls = null) {
       </div>
     </div>
     <div class="form-group">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${c.start_date ? '10px' : '0'}">
+        <div>
+          <div class="form-label" style="margin-bottom:2px">단기 기간 설정</div>
+          <div style="font-size:12px;color:var(--text3)">설정 기간에만 출석·결과 탭에 표시</div>
+        </div>
+        <button class="toggle-btn ${c.start_date ? 'active' : ''}" id="cf-period-toggle" data-active="${c.start_date ? 'true' : 'false'}">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+      <div id="cf-period-wrap" style="display:${c.start_date ? 'block' : 'none'}">
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">시작일</label>
+            <input class="form-input" id="cf-start-date" type="date" value="${c.start_date || ''}" />
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">종료일</label>
+            <input class="form-input" id="cf-end-date" type="date" value="${c.end_date || ''}" min="${c.start_date || ''}" />
+          </div>
+        </div>
+        ${c.start_date && c.end_date ? `<div style="font-size:12px;color:var(--text3);margin-top:6px">${c.start_date} ~ ${c.end_date}</div>` : ''}
+      </div>
+    </div>
+    <div class="form-group">
       <label class="form-label">수강생</label>
       <div class="selected-student-tags" id="cf-selected-tags"></div>
       <input class="form-input" id="cf-student-search" type="text" placeholder="이름, 학교, 학년, 과목 검색..." />
@@ -333,6 +360,32 @@ function setupClassForm(mode, cls) {
       clinicToggle.dataset.active = String(next)
       clinicToggle.classList.toggle('active', next)
     }
+  }
+
+  // 단기 기간 설정 토글
+  const periodToggle = document.getElementById('cf-period-toggle')
+  if (periodToggle) {
+    periodToggle.onclick = (e) => {
+      e.stopPropagation()
+      const next = periodToggle.dataset.active !== 'true'
+      periodToggle.dataset.active = String(next)
+      periodToggle.classList.toggle('active', next)
+      const wrap = document.getElementById('cf-period-wrap')
+      wrap.style.display = next ? 'block' : 'none'
+      periodToggle.closest('.form-group').querySelector('div').style.marginBottom = next ? '10px' : '0'
+    }
+  }
+
+  // 시작일 변경 시 종료일 min 자동 설정
+  const startDateInput = document.getElementById('cf-start-date')
+  const endDateInput = document.getElementById('cf-end-date')
+  if (startDateInput && endDateInput) {
+    startDateInput.addEventListener('change', () => {
+      endDateInput.min = startDateInput.value
+      if (endDateInput.value && endDateInput.value < startDateInput.value) {
+        endDateInput.value = ''
+      }
+    })
   }
 
   // 과목 — 단일 선택
@@ -413,6 +466,19 @@ function setupClassForm(mode, cls) {
     const name = document.getElementById('cf-name').value.trim()
     if (!name) { showToast('수업명을 입력하세요', 'error'); return }
 
+    const isPeriod = document.getElementById('cf-period-toggle')?.dataset.active === 'true'
+    const startDate = document.getElementById('cf-start-date')?.value || ''
+    const endDate = document.getElementById('cf-end-date')?.value || ''
+
+    if (isPeriod) {
+      if (!startDate || !endDate) {
+        showToast('시작일과 종료일을 모두 입력해주세요', 'error'); return
+      }
+      if (endDate < startDate) {
+        showToast('종료일은 시작일보다 앞설 수 없습니다', 'error'); return
+      }
+    }
+
     const subject = document.querySelector('#cf-subjects .subject-toggle.selected')?.dataset.subject || ''
     const days = [...document.querySelectorAll('#cf-days .day-toggle.selected')]
       .map(b => b.dataset.day)
@@ -430,6 +496,8 @@ function setupClassForm(mode, cls) {
       sub_teacher: document.getElementById('cf-sub-teacher-toggle')?.dataset.active === 'true'
         ? (document.getElementById('cf-sub-teacher').value.trim() || null)
         : null,
+      start_date: isPeriod ? startDate : null,
+      end_date: isPeriod ? endDate : null,
     }
 
     const btn = document.getElementById('cf-submit')
