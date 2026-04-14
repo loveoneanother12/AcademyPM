@@ -1120,10 +1120,11 @@ function renderCalendar(popup) {
 // 단발성 수업 캘린더 (모달 내부용)
 // ========================================
 
-function renderOnedayCalendar(containerId, selectedDate, onSelect) {
+export function renderOnedayCalendar(containerId, selectedDate, onSelect, options = {}) {
   const container = document.getElementById(containerId)
   if (!container) return
 
+  const { minDate = '', maxDate = '' } = options
   const init = new Date((selectedDate || currentDate) + 'T00:00:00')
   let viewYear = init.getFullYear()
   let viewMonth = init.getMonth()
@@ -1138,8 +1139,9 @@ function renderOnedayCalendar(containerId, selectedDate, onSelect) {
     for (let i = 0; i < firstDay; i++) cells.push('<div class="cal-day"></div>')
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      const isDisabled = (minDate && dateStr < minDate) || (maxDate && dateStr > maxDate)
       cells.push(`
-        <div class="cal-day ${picked === dateStr ? 'selected' : ''} ${dateStr === today ? 'today' : ''}"
+        <div class="cal-day ${picked === dateStr ? 'selected' : ''} ${dateStr === today ? 'today' : ''} ${isDisabled ? 'disabled' : ''}"
           data-date="${dateStr}">${d}</div>
       `)
     }
@@ -1168,7 +1170,7 @@ function renderOnedayCalendar(containerId, selectedDate, onSelect) {
       if (viewMonth > 11) { viewMonth = 0; viewYear++ }
       render()
     }
-    container.querySelectorAll('.cal-day[data-date]').forEach(el => {
+    container.querySelectorAll('.cal-day[data-date]:not(.disabled)').forEach(el => {
       el.onclick = (e) => {
         e.stopPropagation()
         picked = el.dataset.date
@@ -1246,11 +1248,12 @@ function buildOnedayFormHTML(cls = null) {
   `
 }
 
-function setupOnedayForm(cls = null) {
+function setupOnedayForm(cls = null, options = {}) {
   let pickedDate = cls?.start_date || ''
   const classStudentIds = (cls?.students || []).map(s => (typeof s === 'object' ? s.id : s))
   let selectedStudentIds = new Set(classStudentIds)
-  const activeStudents = allStudents.filter(s => s.status !== 'inactive')
+  const studentsSource = options.students || allStudents
+  const activeStudents = studentsSource.filter(s => s.status !== 'inactive')
 
   // 보조강사 토글
   const subTeacherToggle = document.getElementById('od-sub-teacher-toggle')
@@ -1314,7 +1317,7 @@ function setupOnedayForm(cls = null) {
     const wrap = document.getElementById('od-selected-tags')
     if (!wrap) return
     wrap.innerHTML = [...selectedStudentIds].map(id => {
-      const s = allStudents.find(st => st.id === id)
+      const s = studentsSource.find(st => st.id === id)
       if (!s) return ''
       return `<span class="selected-student-tag" data-id="${s.id}">${s.name}<button class="tag-remove" data-id="${s.id}">×</button></span>`
     }).join('')
@@ -1404,7 +1407,8 @@ function setupOnedayForm(cls = null) {
         showToast('단발 수업이 추가되었습니다', 'success')
       }
       closeModal()
-      await loadAttendanceData()
+      if (options.onSuccess) await options.onSuccess()
+      else await loadAttendanceData()
     } catch (e) {
       showToast('저장 실패: ' + e.message, 'error')
       btn.disabled = false
@@ -1413,7 +1417,7 @@ function setupOnedayForm(cls = null) {
   }
 }
 
-function openOnedayClassModal(cls = null) {
+export function openOnedayClassModal(cls = null, options = {}) {
   openModal(buildOnedayFormHTML(cls), null)
-  setupOnedayForm(cls)
+  setupOnedayForm(cls, options)
 }

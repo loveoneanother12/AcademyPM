@@ -12,12 +12,17 @@ import {
   getAllClassMemos,
 } from '../api.js'
 import { openModal, closeModal } from '../components/modal.js'
+import { openOnedayClassModal, renderOnedayCalendar } from './attendance.js'
 import { showToast } from '../components/toast.js'
 import { isOnline } from '../lib/supabase.js'
 
 let allClasses = []
 let allStudents = []
 let searchQuery = ''
+let classTab = 'regular'
+let onedayPreset = null   // null | '1w' | '1m' | '2m' | '3m' | 'custom'
+let onedayFrom = ''
+let onedayTo = ''
 
 function escapeHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -29,6 +34,10 @@ const DAYS = ['월', '화', '수', '목', '금', '토', '일']
 
 export async function renderClassesPage(container) {
   container.innerHTML = `
+    <div class="sub-tab-bar">
+      <button class="sub-tab-btn ${classTab === 'regular' ? 'active' : ''}" data-tab="regular">정규수업</button>
+      <button class="sub-tab-btn ${classTab === 'oneday' ? 'active' : ''}" data-tab="oneday">단회성 / 보강</button>
+    </div>
     <div class="search-wrap">
       <input class="search-input" id="class-search" type="text" placeholder="수업명 또는 선생님 검색..." value="${searchQuery}" />
     </div>
@@ -46,7 +55,36 @@ export async function renderClassesPage(container) {
     fab.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`
     document.body.appendChild(fab)
   }
-  fab.onclick = () => openAddClassModal()
+  function openClassTypeModal() {
+    openModal(`
+      <h2 class="modal-title">수업 추가</h2>
+      <div style="display:flex;gap:12px;padding:8px 0 4px">
+        <button class="btn btn-primary" id="type-regular" style="flex:1;padding:16px;font-size:15px">정규수업 추가</button>
+        <button class="btn" id="type-oneday" style="flex:1;padding:16px;font-size:15px;background:#5c1e32;border:1px solid #7a2840;color:#e8c0cc">단회성 / 보강 추가</button>
+      </div>
+    `, null)
+    document.getElementById('type-regular').onclick = () => {
+      closeModal()
+      openAddClassModal()
+    }
+    document.getElementById('type-oneday').onclick = () => {
+      closeModal()
+      openOnedayClassModal(null, {
+        students: allStudents,
+        onSuccess: loadClasses,
+      })
+    }
+  }
+
+  fab.onclick = () => openClassTypeModal()
+
+  container.querySelectorAll('.sub-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      classTab = btn.dataset.tab
+      container.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === classTab))
+      renderClassList()
+    })
+  })
 
   container.querySelector('#class-search').addEventListener('input', (e) => {
     searchQuery = e.target.value.toLowerCase()
@@ -76,8 +114,9 @@ function renderClassList() {
     return
   }
 
+  const isOneday = classTab === 'oneday'
   const filtered = allClasses.filter(cls =>
-    !cls.is_oneday && (
+    (isOneday ? cls.is_oneday : !cls.is_oneday) && (
       cls.name.toLowerCase().includes(searchQuery) ||
       (cls.teacher || '').toLowerCase().includes(searchQuery) ||
       (cls.subject || '').toLowerCase().includes(searchQuery)
@@ -88,20 +127,138 @@ function renderClassList() {
     wrap.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">📚</div>
-        <div class="empty-state-text">검색 결과가 없습니다</div>
+        <div class="empty-state-text">${searchQuery ? '검색 결과가 없습니다' : (isOneday ? '등록된 보강 수업이 없습니다' : '등록된 수업이 없습니다')}</div>
       </div>
     `
     return
   }
 
-  wrap.innerHTML = `<div class="card-list">${filtered.map(cls => classCardHTML(cls)).join('')}</div>`
+  if (isOneday) {
+    const today = new Date().toLocaleDateString('sv-KR')
+    const PRESET_LABELS = { '1w': '1주일', '1m': '1개월', '2m': '2개월', '3m': '3개월' }
 
-  wrap.querySelectorAll('.card[data-class-id]').forEach(card => {
-    card.addEventListener('click', () => {
-      const cls = filtered.find(c => c.id === card.dataset.classId)
-      if (cls) openClassDetailModal(cls)
+    function computeFrom(preset) {
+      const d = new Date()
+      if (preset === '1w') d.setDate(d.getDate() - 7)
+      else if (preset === '1m') d.setMonth(d.getMonth() - 1)
+      else if (preset === '2m') d.setMonth(d.getMonth() - 2)
+      else if (preset === '3m') d.setMonth(d.getMonth() - 3)
+      return d.toLocaleDateString('sv-KR')
+    }
+
+    const sorted = [...filtered].sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))
+
+    let dateFiltered = sorted
+    if (onedayPreset && onedayPreset !== 'custom') {
+      const from = computeFrom(onedayPreset)
+      dateFiltered = sorted.filter(cls => (cls.start_date || '') >= from && (cls.start_date || '') <= today)
+    } else if (onedayPreset === 'custom' && onedayFrom && onedayTo) {
+      dateFiltered = sorted.filter(cls => (cls.start_date || '') >= onedayFrom && (cls.start_date || '') <= onedayTo)
+    }
+
+    const cardsHTML = dateFiltered.length > 0
+      ? `<div class="card-list">${dateFiltered.map(cls => onedayCardHTML(cls)).join('')}</div>`
+      : `<div class="empty-state"><div class="empty-state-icon">📚</div><div class="empty-state-text">해당 기간에 보강 수업이 없습니다</div></div>`
+
+    wrap.innerHTML = `
+      <div class="oneday-filter-bar">
+        <div class="oneday-preset-row">
+          ${Object.entries(PRESET_LABELS).map(([p, label]) =>
+            `<button class="preset-btn${onedayPreset === p ? ' active' : ''}" data-preset="${p}">${label}</button>`
+          ).join('')}
+          <button class="preset-btn${onedayPreset === 'custom' ? ' active' : ''}" data-preset="custom">직접 설정</button>
+        </div>
+        ${onedayPreset === 'custom' ? `
+        <div class="oneday-custom-row">
+          <button class="od-filter-date-btn${onedayFrom ? ' has-value' : ''}" id="od-filter-from">${onedayFrom || '시작일'}</button>
+          <span class="od-filter-sep">~</span>
+          <button class="od-filter-date-btn${onedayTo ? ' has-value' : ''}" id="od-filter-to">${onedayTo || '종료일'}</button>
+        </div>
+        <div id="od-filter-cal" class="od-calendar-popup hidden"></div>
+        ` : ''}
+      </div>
+      ${cardsHTML}
+    `
+
+    // 프리셋 버튼 바인딩
+    wrap.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = btn.dataset.preset
+        if (onedayPreset === p) {
+          onedayPreset = null
+          if (p !== 'custom') { onedayFrom = ''; onedayTo = '' }
+        } else {
+          onedayPreset = p
+          if (p !== 'custom') { onedayFrom = ''; onedayTo = '' }
+        }
+        renderClassList()
+      })
     })
-  })
+
+    // 직접 설정 날짜 피커 바인딩
+    const fromBtn = document.getElementById('od-filter-from')
+    const toBtn = document.getElementById('od-filter-to')
+    const calEl = document.getElementById('od-filter-cal')
+
+    if (fromBtn && toBtn && calEl) {
+      let calTarget = null
+      let calOpen = false
+
+      function closeFilterCal(e) {
+        if (calEl && e && calEl.contains(e.target)) {
+          document.addEventListener('click', closeFilterCal, { once: true })
+          return
+        }
+        calOpen = false
+        calEl.classList.add('hidden')
+      }
+
+      function openFilterCal(target) {
+        calTarget = target
+        calOpen = true
+        calEl.classList.remove('hidden')
+        const initDate = target === 'from' ? (onedayFrom || today) : (onedayTo || today)
+        const calOptions = target === 'from'
+          ? (onedayTo ? { maxDate: onedayTo } : {})
+          : (onedayFrom ? { minDate: onedayFrom } : {})
+        renderOnedayCalendar('od-filter-cal', initDate, (d) => {
+          if (calTarget === 'from') onedayFrom = d
+          else onedayTo = d
+          calOpen = false
+          calEl.classList.add('hidden')
+          renderClassList()
+        }, calOptions)
+        setTimeout(() => {
+          document.addEventListener('click', closeFilterCal, { once: true })
+        }, 50)
+      }
+
+      fromBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        calOpen && calTarget === 'from' ? closeFilterCal(null) : openFilterCal('from')
+      })
+      toBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        calOpen && calTarget === 'to' ? closeFilterCal(null) : openFilterCal('to')
+      })
+    }
+
+    // 카드 클릭
+    wrap.querySelectorAll('.card[data-class-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        const cls = dateFiltered.find(c => c.id === card.dataset.classId)
+        if (cls) openClassDetailModal(cls)
+      })
+    })
+  } else {
+    wrap.innerHTML = `<div class="card-list">${filtered.map(cls => classCardHTML(cls)).join('')}</div>`
+    wrap.querySelectorAll('.card[data-class-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        const cls = filtered.find(c => c.id === card.dataset.classId)
+        if (cls) openClassDetailModal(cls)
+      })
+    })
+  }
 }
 
 function classCardHTML(cls) {
@@ -128,6 +285,28 @@ function classCardHTML(cls) {
             ${students.length}명
           </span>
         </div>
+      </div>
+    </div>
+  `
+}
+
+function onedayCardHTML(cls) {
+  const students = cls.students || []
+  return `
+    <div class="card accordion-item--oneday" data-class-id="${cls.id}" style="border-radius:var(--radius);border:1px solid #37212e;cursor:pointer">
+      <div class="class-card-header">
+        <div>
+          <div class="class-card-name">${cls.name}</div>
+          <div class="class-card-meta">${cls.teacher ? cls.teacher + ' · ' : ''}${cls.start_date || ''}</div>
+        </div>
+        <span class="subject-tag ${cls.subject || ''}">${cls.subject || ''}</span>
+      </div>
+      <div class="class-card-footer">
+        <div style="font-size:12px;color:var(--text3)">${cls.time || ''}</div>
+        <span class="count-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          ${students.length}명
+        </span>
       </div>
     </div>
   `

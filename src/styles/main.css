@@ -227,12 +227,41 @@ body {
 }
 
 /* === 검색창 === */
+.sub-tab-bar {
+  display: flex;
+  gap: 0;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  padding: 0 16px;
+}
+
+.sub-tab-btn {
+  flex: 1;
+  padding: 12px 0;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text3);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.sub-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
 .search-wrap {
   padding: 10px 16px;
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
   position: sticky;
-  top: 0;
+  top: 45px;
   z-index: 5;
 }
 
@@ -1650,6 +1679,72 @@ body {
   display: none;
 }
 
+.oneday-filter-bar {
+  padding: 10px 16px 0;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.oneday-preset-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+}
+
+.preset-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.preset-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.oneday-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+}
+
+.od-filter-date-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text3);
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.od-filter-date-btn.has-value {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.od-filter-sep {
+  color: var(--text3);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
 .od-calendar-popup {
   position: absolute;
   top: calc(100% + 4px);
@@ -1752,6 +1847,11 @@ body {
 .cal-day.today:not(.selected) {
   color: var(--accent);
   font-weight: 700;
+}
+
+.cal-day.disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
 }
 
 .cal-day-dot {

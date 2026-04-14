@@ -20,12 +20,18 @@ import { isOnline } from '../lib/supabase.js'
 
 let allStudents = []
 let searchQuery = ''
+let studentTab = 'all'
 
 const SUBJECTS = ['수학', '영어', '국어', '과학']
 const GRADES = ['중1', '중2', '중3', '고1', '고2', '고3']
 
 export async function renderStudentsPage(container) {
   container.innerHTML = `
+    <div class="sub-tab-bar">
+      <button class="sub-tab-btn ${studentTab === 'all' ? 'active' : ''}" data-tab="all">전체</button>
+      <button class="sub-tab-btn ${studentTab === 'high' ? 'active' : ''}" data-tab="high">고등</button>
+      <button class="sub-tab-btn ${studentTab === 'middle' ? 'active' : ''}" data-tab="middle">중등</button>
+    </div>
     <div class="search-wrap">
       <input class="search-input" id="student-search" type="text" placeholder="이름 또는 학교 검색..." value="${searchQuery}" />
     </div>
@@ -46,6 +52,15 @@ export async function renderStudentsPage(container) {
   }
   fab.onclick = () => openAddStudentModal()
 
+  // 서브 탭
+  container.querySelectorAll('.sub-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      studentTab = btn.dataset.tab
+      container.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === studentTab))
+      renderStudentList()
+    })
+  })
+
   // 검색
   container.querySelector('#student-search').addEventListener('input', (e) => {
     searchQuery = e.target.value.toLowerCase()
@@ -64,10 +79,15 @@ function renderStudentList() {
   const wrap = document.getElementById('students-list-wrap')
   if (!wrap) return
 
-  const filtered = allStudents.filter(s =>
-    s.name.toLowerCase().includes(searchQuery) ||
-    (s.school || '').toLowerCase().includes(searchQuery)
-  )
+  const HIGH_GRADES = ['고1', '고2', '고3']
+  const MIDDLE_GRADES = ['중1', '중2', '중3']
+
+  const filtered = allStudents.filter(s => {
+    if (studentTab === 'high' && !HIGH_GRADES.includes(s.grade)) return false
+    if (studentTab === 'middle' && !MIDDLE_GRADES.includes(s.grade)) return false
+    return s.name.toLowerCase().includes(searchQuery) ||
+      (s.school || '').toLowerCase().includes(searchQuery)
+  })
 
   if (filtered.length === 0) {
     wrap.innerHTML = `
