@@ -138,7 +138,10 @@ export async function renderReportPage(container, token) {
             <div class="report-score-list">
               ${clsScores.map(s => `
                 <div class="report-score-row">
-                  <span class="report-score-date">${fmtDate(s.date)}</span>
+                  <div style="display:flex;flex-direction:column;gap:1px">
+                    ${s.test_name ? `<span style="font-size:12px;color:var(--text)">${s.test_name}</span>` : ''}
+                    <span class="report-score-date">${fmtDate(s.date)}</span>
+                  </div>
                   <span class="report-score-val">${s.score}점</span>
                 </div>
               `).join('')}
