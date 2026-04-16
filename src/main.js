@@ -35,6 +35,7 @@ async function navigateTo(tab) {
   })
 
   const content = document.getElementById('page-content')
+  content.classList.remove('oneday-mode')
   content.innerHTML = '<div class="loading-screen"><div class="loading-spinner"></div></div>'
 
   try {

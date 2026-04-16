@@ -31,8 +31,20 @@ let testScoreCache = {}    // classId → { studentId → score }
 let studentMemoCache = {}  // classId → { studentId → memo string }
 let calendarVisible = false
 let attSearchQuery = ''
+let attFilterGrade = ''
+let attFilterSubjects = new Set()
+let attSubjectAndMode = false
+let _closeDropdowns = null
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
+const GRADES = ['중1', '중2', '중3', '고1', '고2', '고3']
+const SUBJECTS = ['수학', '영어', '국어', '과학']
+
+function attSubjectBtnLabel() {
+  if (attFilterSubjects.size === 0) return '과목'
+  const arr = [...attFilterSubjects]
+  return arr.length === 1 ? arr[0] : `${arr[0]} 외 ${arr.length - 1}`
+}
 
 export async function renderAttendancePage(container) {
   container.innerHTML = `
@@ -58,6 +70,39 @@ export async function renderAttendancePage(container) {
     </div>
     <div class="search-wrap">
       <input class="search-input" id="att-search" type="text" placeholder="수업명, 강사, 과목, 학생 검색..." />
+      <div class="filter-row">
+        <div class="filter-dropdown-wrap">
+          <button class="filter-btn${attFilterGrade ? ' active' : ''}" id="att-grade-filter-btn">
+            <span class="filter-label">${attFilterGrade || '학년'}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+          </button>
+          <div class="filter-dropdown" id="att-grade-dropdown">
+            <button class="filter-opt${!attFilterGrade ? ' selected' : ''}" data-value="">전체</button>
+            ${GRADES.map(g => `<button class="filter-opt${attFilterGrade === g ? ' selected' : ''}" data-value="${g}">${g}</button>`).join('')}
+          </div>
+        </div>
+        <div class="filter-dropdown-wrap">
+          <button class="filter-btn${attFilterSubjects.size > 0 ? ' active' : ''}" id="att-subject-filter-btn">
+            <span class="filter-label">${attSubjectBtnLabel()}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+          </button>
+          <div class="filter-dropdown filter-dropdown--subject" id="att-subject-dropdown">
+            <div class="subject-dd-left">
+              <button class="filter-opt${attFilterSubjects.size === 0 ? ' selected' : ''}" data-value="">전체</button>
+              ${SUBJECTS.map(s => `<button class="filter-opt${attFilterSubjects.has(s) ? ' selected' : ''}" data-value="${s}">${s}</button>`).join('')}
+            </div>
+            <div class="subject-dd-divider"></div>
+            <div class="subject-dd-right">
+              <div class="subject-dd-and-row">
+                <span class="subject-dd-and-label">AND 조건 추가</span>
+                <button class="toggle-btn${attSubjectAndMode ? ' active' : ''}" id="att-subject-and-toggle" data-active="${attSubjectAndMode}"><span class="toggle-knob"></span></button>
+              </div>
+              <div class="subject-dd-desc">AND 조건 추가 시 선택된 과목들을 동시에 수강하는 학생만 표시됩니다.</div>
+              <button class="subject-dd-reset" id="att-subject-dd-reset-btn">초기화</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="att-accordion-list" class="accordion-list">
       <div class="loading-screen"><div class="loading-spinner"></div></div>
@@ -82,6 +127,110 @@ export async function renderAttendancePage(container) {
   document.getElementById('att-cal-btn').onclick = () => toggleCalendar()
   document.getElementById('att-search').addEventListener('input', e => {
     attSearchQuery = e.target.value.toLowerCase()
+    renderAccordionList()
+  })
+
+  // 필터 드롭다운
+  if (_closeDropdowns) document.removeEventListener('click', _closeDropdowns)
+  _closeDropdowns = () => {
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+  }
+  document.addEventListener('click', _closeDropdowns)
+
+  // 학년 드롭다운
+  const gradeBtn = container.querySelector('#att-grade-filter-btn')
+  const gradeDrop = container.querySelector('#att-grade-dropdown')
+  gradeBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const isOpen = gradeDrop.classList.contains('open')
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+    if (!isOpen) gradeDrop.classList.add('open')
+  })
+  gradeDrop.querySelectorAll('.filter-opt').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation()
+      attFilterGrade = opt.dataset.value
+      gradeDrop.classList.remove('open')
+      gradeBtn.classList.toggle('active', !!opt.dataset.value)
+      gradeBtn.querySelector('.filter-label').textContent = opt.dataset.value || '학년'
+      gradeDrop.querySelectorAll('.filter-opt').forEach(o => o.classList.toggle('selected', o.dataset.value === opt.dataset.value))
+      renderAccordionList()
+    })
+  })
+
+  // 과목 드롭다운 (AND 다중선택)
+  const subjBtn = container.querySelector('#att-subject-filter-btn')
+  const subjDrop = container.querySelector('#att-subject-dropdown')
+  const subjAndToggle = subjDrop.querySelector('#att-subject-and-toggle')
+  const subjResetBtn = subjDrop.querySelector('#att-subject-dd-reset-btn')
+
+  subjDrop.addEventListener('click', e => e.stopPropagation())
+
+  function updateSubjBtn() {
+    subjBtn.classList.toggle('active', attFilterSubjects.size > 0)
+    subjBtn.querySelector('.filter-label').textContent = attSubjectBtnLabel()
+  }
+  function updateSubjOpts() {
+    subjDrop.querySelectorAll('.filter-opt').forEach(opt => {
+      if (opt.dataset.value === '') {
+        opt.classList.toggle('selected', attFilterSubjects.size === 0)
+      } else {
+        opt.classList.toggle('selected', attFilterSubjects.has(opt.dataset.value))
+      }
+    })
+  }
+
+  subjBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const isOpen = subjDrop.classList.contains('open')
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+    if (!isOpen) subjDrop.classList.add('open')
+  })
+
+  subjDrop.querySelectorAll('.filter-opt').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const val = opt.dataset.value
+      if (!attSubjectAndMode) {
+        attFilterSubjects.clear()
+        if (val) attFilterSubjects.add(val)
+        subjDrop.classList.remove('open')
+      } else {
+        if (val === '') {
+          attFilterSubjects.clear()
+        } else {
+          attFilterSubjects.has(val) ? attFilterSubjects.delete(val) : attFilterSubjects.add(val)
+        }
+      }
+      updateSubjBtn()
+      updateSubjOpts()
+      renderAccordionList()
+    })
+  })
+
+  subjAndToggle.addEventListener('click', (e) => {
+    e.stopPropagation()
+    attSubjectAndMode = !attSubjectAndMode
+    subjAndToggle.classList.toggle('active', attSubjectAndMode)
+    subjAndToggle.dataset.active = String(attSubjectAndMode)
+    if (!attSubjectAndMode && attFilterSubjects.size > 1) {
+      const first = [...attFilterSubjects][0]
+      attFilterSubjects.clear()
+      attFilterSubjects.add(first)
+      updateSubjBtn()
+      updateSubjOpts()
+      renderAccordionList()
+    }
+  })
+
+  subjResetBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    attFilterSubjects.clear()
+    attSubjectAndMode = false
+    subjAndToggle.classList.remove('active')
+    subjAndToggle.dataset.active = 'false'
+    updateSubjBtn()
+    updateSubjOpts()
     renderAccordionList()
   })
 
@@ -227,20 +376,27 @@ function renderAccordionList() {
     return
   }
 
-  const visibleClasses = attSearchQuery
-    ? todayClasses.filter(cls =>
-        cls.name.toLowerCase().includes(attSearchQuery) ||
-        (cls.teacher || '').toLowerCase().includes(attSearchQuery) ||
-        (cls.subject || '').toLowerCase().includes(attSearchQuery) ||
-        (cls.students || []).some(s => (typeof s === 'object' ? s.name : '').toLowerCase().includes(attSearchQuery))
-      )
-    : todayClasses
+  const visibleClasses = todayClasses.filter(cls => {
+    if (attFilterGrade && cls.grade !== attFilterGrade) return false
+    if (attFilterSubjects.size > 0) {
+      if (attSubjectAndMode) {
+        if (![...attFilterSubjects].every(sub => cls.subject === sub)) return false
+      } else {
+        if (![...attFilterSubjects].some(sub => cls.subject === sub)) return false
+      }
+    }
+    if (!attSearchQuery) return true
+    return cls.name.toLowerCase().includes(attSearchQuery) ||
+      (cls.teacher || '').toLowerCase().includes(attSearchQuery) ||
+      (cls.subject || '').toLowerCase().includes(attSearchQuery) ||
+      (cls.students || []).some(s => (typeof s === 'object' ? s.name : '').toLowerCase().includes(attSearchQuery))
+  })
 
   if (visibleClasses.length === 0) {
     list.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">🔍</div>
-        <div class="empty-state-text">검색 결과가 없습니다</div>
+        <div class="empty-state-text">${(attSearchQuery || attFilterGrade || attFilterSubjects.size > 0) ? '조건에 맞는 수업이 없습니다' : '검색 결과가 없습니다'}</div>
       </div>
     `
     return
@@ -347,7 +503,7 @@ function accordionHTML(cls) {
   const hasMemo = !!memoCache[cls.id]
 
   return `
-    <div class="accordion-item${cls.is_oneday ? ' accordion-item--oneday' : ''}" data-class-id="${cls.id}">
+    <div class="accordion-item${cls.is_oneday ? ' accordion-item--oneday' : cls.start_date && cls.end_date ? ' card--timelimit' : ' card--regular'}" data-class-id="${cls.id}">
       <div class="accordion-header">
         <div class="accordion-title-group">
           <div class="accordion-class-name">${cls.name}</div>

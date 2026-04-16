@@ -21,9 +21,19 @@ import { isOnline } from '../lib/supabase.js'
 let allStudents = []
 let searchQuery = ''
 let studentTab = 'all'
+let filterGrade = ''
+let filterSubjects = new Set()
+let subjectAndMode = false
+let _closeDropdowns = null
 
 const SUBJECTS = ['수학', '영어', '국어', '과학']
 const GRADES = ['중1', '중2', '중3', '고1', '고2', '고3']
+
+function subjectBtnLabel() {
+  if (filterSubjects.size === 0) return '과목'
+  const arr = [...filterSubjects]
+  return arr.length === 1 ? arr[0] : `${arr[0]} 외 ${arr.length - 1}`
+}
 
 export async function renderStudentsPage(container) {
   container.innerHTML = `
@@ -34,6 +44,39 @@ export async function renderStudentsPage(container) {
     </div>
     <div class="search-wrap">
       <input class="search-input" id="student-search" type="text" placeholder="이름 또는 학교 검색..." value="${searchQuery}" />
+      <div class="filter-row">
+        <div class="filter-dropdown-wrap">
+          <button class="filter-btn${filterGrade ? ' active' : ''}" id="grade-filter-btn">
+            <span class="filter-label">${filterGrade || '학년'}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+          </button>
+          <div class="filter-dropdown" id="grade-dropdown">
+            <button class="filter-opt${!filterGrade ? ' selected' : ''}" data-value="">전체</button>
+            ${GRADES.map(g => `<button class="filter-opt${filterGrade === g ? ' selected' : ''}" data-value="${g}">${g}</button>`).join('')}
+          </div>
+        </div>
+        <div class="filter-dropdown-wrap">
+          <button class="filter-btn${filterSubjects.size > 0 ? ' active' : ''}" id="subject-filter-btn">
+            <span class="filter-label">${subjectBtnLabel()}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+          </button>
+          <div class="filter-dropdown filter-dropdown--subject" id="subject-dropdown">
+            <div class="subject-dd-left">
+              <button class="filter-opt${filterSubjects.size === 0 ? ' selected' : ''}" data-value="">전체</button>
+              ${SUBJECTS.map(s => `<button class="filter-opt${filterSubjects.has(s) ? ' selected' : ''}" data-value="${s}">${s}</button>`).join('')}
+            </div>
+            <div class="subject-dd-divider"></div>
+            <div class="subject-dd-right">
+              <div class="subject-dd-and-row">
+                <span class="subject-dd-and-label">AND 조건 추가</span>
+                <button class="toggle-btn${subjectAndMode ? ' active' : ''}" id="subject-and-toggle" data-active="${subjectAndMode}"><span class="toggle-knob"></span></button>
+              </div>
+              <div class="subject-dd-desc">AND 조건 추가 시 선택된 과목들을 동시에 수강하는 학생만 표시됩니다.</div>
+              <button class="subject-dd-reset" id="subject-dd-reset-btn">초기화</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="students-list-wrap" class="page-wrap">
       <div class="loading-screen"><div class="loading-spinner"></div></div>
@@ -57,6 +100,7 @@ export async function renderStudentsPage(container) {
     btn.addEventListener('click', () => {
       studentTab = btn.dataset.tab
       container.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === studentTab))
+      refreshGradeDropdown()
       renderStudentList()
     })
   })
@@ -66,6 +110,148 @@ export async function renderStudentsPage(container) {
     searchQuery = e.target.value.toLowerCase()
     renderStudentList()
   })
+
+  // 필터 드롭다운
+  if (_closeDropdowns) document.removeEventListener('click', _closeDropdowns)
+  _closeDropdowns = () => {
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+  }
+  document.addEventListener('click', _closeDropdowns)
+
+  function setupDropdownToggle(btnId, dropId) {
+    const btn = container.querySelector(`#${btnId}`)
+    const drop = container.querySelector(`#${dropId}`)
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const isOpen = drop.classList.contains('open')
+      document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+      if (!isOpen) drop.classList.add('open')
+    })
+  }
+
+  function buildDropdownOptions(drop, btn, options, getCurrent, setCurrent, defaultLabel) {
+    const current = getCurrent()
+    drop.innerHTML = [
+      `<button class="filter-opt${!current ? ' selected' : ''}" data-value="">전체</button>`,
+      ...options.map(v => `<button class="filter-opt${current === v ? ' selected' : ''}" data-value="${v}">${v}</button>`)
+    ].join('')
+    drop.querySelectorAll('.filter-opt').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation()
+        setCurrent(opt.dataset.value)
+        drop.classList.remove('open')
+        btn.classList.toggle('active', !!opt.dataset.value)
+        btn.querySelector('.filter-label').textContent = opt.dataset.value || defaultLabel
+        drop.querySelectorAll('.filter-opt').forEach(o => o.classList.toggle('selected', o.dataset.value === opt.dataset.value))
+        renderStudentList()
+      })
+    })
+  }
+
+  function refreshGradeDropdown() {
+    const availableGrades = studentTab === 'high' ? ['고1', '고2', '고3']
+      : studentTab === 'middle' ? ['중1', '중2', '중3']
+      : GRADES
+    if (filterGrade && !availableGrades.includes(filterGrade)) {
+      filterGrade = ''
+      const btn = container.querySelector('#grade-filter-btn')
+      if (btn) {
+        btn.classList.remove('active')
+        btn.querySelector('.filter-label').textContent = '학년'
+      }
+    }
+    const btn = container.querySelector('#grade-filter-btn')
+    const drop = container.querySelector('#grade-dropdown')
+    if (btn && drop) buildDropdownOptions(drop, btn, availableGrades, () => filterGrade, v => { filterGrade = v }, '학년')
+  }
+
+  setupDropdownToggle('grade-filter-btn', 'grade-dropdown')
+  refreshGradeDropdown()
+  setupSubjectDropdown()
+
+  function setupSubjectDropdown() {
+    const btn = container.querySelector('#subject-filter-btn')
+    const drop = container.querySelector('#subject-dropdown')
+    const andToggle = drop.querySelector('#subject-and-toggle')
+    const resetBtn = drop.querySelector('#subject-dd-reset-btn')
+
+    // 드롭다운 내부 클릭은 항상 버블링 차단 (외부 클릭으로만 닫힘)
+    drop.addEventListener('click', e => e.stopPropagation())
+
+    function updateBtn() {
+      btn.classList.toggle('active', filterSubjects.size > 0)
+      btn.querySelector('.filter-label').textContent = subjectBtnLabel()
+    }
+
+    function updateOpts() {
+      drop.querySelectorAll('.filter-opt').forEach(opt => {
+        if (opt.dataset.value === '') {
+          opt.classList.toggle('selected', filterSubjects.size === 0)
+        } else {
+          opt.classList.toggle('selected', filterSubjects.has(opt.dataset.value))
+        }
+      })
+    }
+
+    // 버튼 클릭: 열기/닫기 토글
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const isOpen = drop.classList.contains('open')
+      document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+      if (!isOpen) drop.classList.add('open')
+    })
+
+    // 과목 옵션 클릭
+    drop.querySelectorAll('.filter-opt').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const val = opt.dataset.value
+        if (!subjectAndMode) {
+          filterSubjects.clear()
+          if (val) filterSubjects.add(val)
+          drop.classList.remove('open')
+        } else {
+          if (val === '') {
+            filterSubjects.clear()
+          } else {
+            filterSubjects.has(val) ? filterSubjects.delete(val) : filterSubjects.add(val)
+          }
+        }
+        updateBtn()
+        updateOpts()
+        renderStudentList()
+      })
+    })
+
+    // AND 토글
+    andToggle.addEventListener('click', (e) => {
+      e.stopPropagation()
+      subjectAndMode = !subjectAndMode
+      andToggle.classList.toggle('active', subjectAndMode)
+      andToggle.dataset.active = String(subjectAndMode)
+      // AND OFF 전환 시 다중 선택 → 첫 번째만 유지
+      if (!subjectAndMode && filterSubjects.size > 1) {
+        const first = [...filterSubjects][0]
+        filterSubjects.clear()
+        filterSubjects.add(first)
+        updateBtn()
+        updateOpts()
+        renderStudentList()
+      }
+    })
+
+    // 초기화
+    resetBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      filterSubjects.clear()
+      subjectAndMode = false
+      andToggle.classList.remove('active')
+      andToggle.dataset.active = 'false'
+      updateBtn()
+      updateOpts()
+      renderStudentList()
+    })
+  }
 
   await loadStudents()
 }
@@ -85,6 +271,15 @@ function renderStudentList() {
   const filtered = allStudents.filter(s => {
     if (studentTab === 'high' && !HIGH_GRADES.includes(s.grade)) return false
     if (studentTab === 'middle' && !MIDDLE_GRADES.includes(s.grade)) return false
+    if (filterGrade && s.grade !== filterGrade) return false
+    if (filterSubjects.size > 0) {
+      const subs = s.subjects || []
+      if (subjectAndMode) {
+        if (![...filterSubjects].every(sub => subs.includes(sub))) return false
+      } else {
+        if (![...filterSubjects].some(sub => subs.includes(sub))) return false
+      }
+    }
     return s.name.toLowerCase().includes(searchQuery) ||
       (s.school || '').toLowerCase().includes(searchQuery)
   })
@@ -93,8 +288,8 @@ function renderStudentList() {
     wrap.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">👤</div>
-        <div class="empty-state-text">${searchQuery ? '검색 결과가 없습니다' : '등록된 학생이 없습니다'}</div>
-        <div class="empty-state-sub">+ 버튼으로 학생을 추가하세요</div>
+        <div class="empty-state-text">${(searchQuery || filterGrade || filterSubjects.size > 0) ? '조건에 맞는 학생이 없습니다' : '등록된 학생이 없습니다'}</div>
+        <div class="empty-state-sub">${(searchQuery || filterGrade || filterSubjects.size > 0) ? '검색어 또는 필터를 변경해 보세요' : '+ 버튼으로 학생을 추가하세요'}</div>
       </div>
     `
     return
@@ -432,7 +627,7 @@ async function openStudentDetailModal(student) {
       try {
         await upsertStudentToken(student.id, token, expiresAt, from, to)
         const url = `${location.origin}${location.pathname}?name=${encodeURIComponent(student.name)}&report=${token}`
-        const qrDataUrl = await QRCode.toDataURL(url, { width: 180, margin: 1, color: { dark: '#ffffff', light: '#1a1a2e' } })
+        const qrDataUrl = await QRCode.toDataURL(url, { width: 180, margin: 1, color: { dark: '#ffffff', light: '#1c1c1f' } })
 
         const resultEl = panel.querySelector('#lp-result')
         resultEl.style.display = 'block'

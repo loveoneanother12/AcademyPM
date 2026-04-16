@@ -23,6 +23,12 @@ let classTab = 'regular'
 let onedayPreset = null   // null | '1w' | '1m' | '2m' | '3m' | 'custom'
 let onedayFrom = ''
 let onedayTo = ''
+let filterGrade = ''
+let filterSubjects = new Set()
+let subjectAndMode = false
+let filterDays = new Set()
+let dayAndMode = false
+let _closeDropdowns = null
 
 function escapeHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -32,6 +38,38 @@ const SUBJECTS = ['수학', '영어', '국어', '과학']
 const GRADES = ['중1', '중2', '중3', '고1', '고2', '고3']
 const DAYS = ['월', '화', '수', '목', '금', '토', '일']
 
+function subjectBtnLabel() {
+  if (filterSubjects.size === 0) return '과목'
+  const arr = [...filterSubjects]
+  return arr.length === 1 ? arr[0] : `${arr[0]} 외 ${arr.length - 1}`
+}
+
+function dayBtnLabel() {
+  if (filterDays.size === 0) return '요일'
+  const arr = [...filterDays]
+  return arr.length === 1 ? arr[0] : `${arr[0]} 외 ${arr.length - 1}`
+}
+
+const PRESET_LABELS = { '1w': '1주일', '1m': '1개월', '2m': '2개월', '3m': '3개월' }
+
+function periodBtnLabel() {
+  if (!onedayPreset) return '기간'
+  if (onedayPreset === 'custom') {
+    if (onedayFrom && onedayTo) return `${onedayFrom.slice(5)} ~ ${onedayTo.slice(5)}`
+    return '직접 설정'
+  }
+  return PRESET_LABELS[onedayPreset]
+}
+
+function computeFrom(preset) {
+  const d = new Date()
+  if (preset === '1w') d.setDate(d.getDate() - 7)
+  else if (preset === '1m') d.setMonth(d.getMonth() - 1)
+  else if (preset === '2m') d.setMonth(d.getMonth() - 2)
+  else if (preset === '3m') d.setMonth(d.getMonth() - 3)
+  return d.toLocaleDateString('sv-KR')
+}
+
 export async function renderClassesPage(container) {
   container.innerHTML = `
     <div class="sub-tab-bar">
@@ -40,6 +78,60 @@ export async function renderClassesPage(container) {
     </div>
     <div class="search-wrap">
       <input class="search-input" id="class-search" type="text" placeholder="수업명 또는 선생님 검색..." value="${searchQuery}" />
+      <div class="filter-row">
+        <div class="filter-dropdown-wrap">
+          <button class="filter-btn${filterGrade ? ' active' : ''}" id="grade-filter-btn">
+            <span class="filter-label">${filterGrade || '학년'}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+          </button>
+          <div class="filter-dropdown" id="grade-dropdown">
+            <button class="filter-opt${!filterGrade ? ' selected' : ''}" data-value="">전체</button>
+            ${GRADES.map(g => `<button class="filter-opt${filterGrade === g ? ' selected' : ''}" data-value="${g}">${g}</button>`).join('')}
+          </div>
+        </div>
+        <div class="filter-dropdown-wrap">
+          <button class="filter-btn${filterSubjects.size > 0 ? ' active' : ''}" id="cls-subject-filter-btn">
+            <span class="filter-label">${subjectBtnLabel()}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+          </button>
+          <div class="filter-dropdown filter-dropdown--subject" id="cls-subject-dropdown">
+            <div class="subject-dd-left">
+              <button class="filter-opt${filterSubjects.size === 0 ? ' selected' : ''}" data-value="">전체</button>
+              ${SUBJECTS.map(s => `<button class="filter-opt${filterSubjects.has(s) ? ' selected' : ''}" data-value="${s}">${s}</button>`).join('')}
+            </div>
+            <div class="subject-dd-divider"></div>
+            <div class="subject-dd-right">
+              <div class="subject-dd-and-row">
+                <span class="subject-dd-and-label">AND 조건 추가</span>
+                <button class="toggle-btn${subjectAndMode ? ' active' : ''}" id="cls-subject-and-toggle" data-active="${subjectAndMode}"><span class="toggle-knob"></span></button>
+              </div>
+              <div class="subject-dd-desc">AND 조건 추가 시 선택된 과목들을 동시에 수강하는 학생만 표시됩니다.</div>
+              <button class="subject-dd-reset" id="cls-subject-dd-reset-btn">초기화</button>
+            </div>
+          </div>
+        </div>
+        <div class="filter-dropdown-wrap">
+          <button class="filter-btn${filterDays.size > 0 ? ' active' : ''}" id="day-filter-btn">
+            <span class="filter-label">${dayBtnLabel()}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+          </button>
+          <div class="filter-dropdown filter-dropdown--subject" id="day-dropdown">
+            <div class="subject-dd-left">
+              <button class="filter-opt${filterDays.size === 0 ? ' selected' : ''}" data-value="">전체</button>
+              ${DAYS.map(d => `<button class="filter-opt${filterDays.has(d) ? ' selected' : ''}" data-value="${d}">${d}요일</button>`).join('')}
+            </div>
+            <div class="subject-dd-divider"></div>
+            <div class="subject-dd-right">
+              <div class="subject-dd-and-row">
+                <span class="subject-dd-and-label">AND 조건 추가</span>
+                <button class="toggle-btn${dayAndMode ? ' active' : ''}" id="day-and-toggle" data-active="${dayAndMode}"><span class="toggle-knob"></span></button>
+              </div>
+              <div class="subject-dd-desc">AND 조건 추가 시 선택된 요일이 모두 포함된 수업만 표시됩니다.</div>
+              <button class="subject-dd-reset" id="day-dd-reset-btn">초기화</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="classes-list-wrap" class="page-wrap">
       <div class="loading-screen"><div class="loading-spinner"></div></div>
@@ -78,10 +170,44 @@ export async function renderClassesPage(container) {
 
   fab.onclick = () => openClassTypeModal()
 
+  function updateTabClass() {
+    container.classList.toggle('oneday-mode', classTab === 'oneday')
+    const filterRow = container.querySelector('.filter-row')
+    if (!filterRow) return
+    const existing = filterRow.querySelector('#period-filter-wrap')
+    if (classTab === 'oneday') {
+      if (!existing) {
+        const wrap = document.createElement('div')
+        wrap.className = 'filter-dropdown-wrap period-filter-wrap-right'
+        wrap.id = 'period-filter-wrap'
+        wrap.innerHTML = `
+          <button class="filter-btn${onedayPreset ? ' active' : ''}" id="period-filter-btn">
+            <span class="filter-label">${periodBtnLabel()}</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+          </button>
+          <div class="filter-dropdown filter-dropdown--period" id="period-dropdown">
+            <button class="filter-opt${!onedayPreset ? ' selected' : ''}" data-preset="">전체</button>
+            ${Object.entries(PRESET_LABELS).map(([p, label]) =>
+              `<button class="filter-opt${onedayPreset === p ? ' selected' : ''}" data-preset="${p}">${label}</button>`
+            ).join('')}
+            <button class="filter-opt${onedayPreset === 'custom' ? ' selected' : ''}" data-preset="custom">직접 설정</button>
+          </div>
+        `
+        filterRow.appendChild(wrap)
+        bindPeriodDropdown(wrap)
+      }
+    } else {
+      if (existing) existing.remove()
+      onedayPreset = null; onedayFrom = ''; onedayTo = ''
+    }
+  }
+  updateTabClass()
+
   container.querySelectorAll('.sub-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       classTab = btn.dataset.tab
       container.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === classTab))
+      updateTabClass()
       renderClassList()
     })
   })
@@ -91,7 +217,310 @@ export async function renderClassesPage(container) {
     renderClassList()
   })
 
+  // 필터 드롭다운
+  if (_closeDropdowns) document.removeEventListener('click', _closeDropdowns)
+  _closeDropdowns = () => {
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+  }
+  document.addEventListener('click', _closeDropdowns)
+
+  function setupDropdownToggle(btnId, dropId) {
+    const btn = container.querySelector(`#${btnId}`)
+    const drop = container.querySelector(`#${dropId}`)
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const isOpen = drop.classList.contains('open')
+      document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+      if (!isOpen) drop.classList.add('open')
+    })
+  }
+
+  function buildDropdownOptions(drop, btn, options, getCurrent, setCurrent, defaultLabel) {
+    const current = getCurrent()
+    drop.innerHTML = [
+      `<button class="filter-opt${!current ? ' selected' : ''}" data-value="">전체</button>`,
+      ...options.map(([val, label]) => `<button class="filter-opt${current === val ? ' selected' : ''}" data-value="${val}">${label}</button>`)
+    ].join('')
+    drop.querySelectorAll('.filter-opt').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation()
+        setCurrent(opt.dataset.value)
+        drop.classList.remove('open')
+        btn.classList.toggle('active', !!opt.dataset.value)
+        btn.querySelector('.filter-label').textContent = opt.dataset.value ? opt.textContent : defaultLabel
+        drop.querySelectorAll('.filter-opt').forEach(o => o.classList.toggle('selected', o.dataset.value === opt.dataset.value))
+        renderClassList()
+      })
+    })
+  }
+
+  setupDropdownToggle('grade-filter-btn', 'grade-dropdown')
+  buildDropdownOptions(
+    container.querySelector('#grade-dropdown'),
+    container.querySelector('#grade-filter-btn'),
+    GRADES.map(g => [g, g]),
+    () => filterGrade, v => { filterGrade = v }, '학년'
+  )
+
+  // 요일 드롭다운 (AND 다중선택)
+  const dayBtn = container.querySelector('#day-filter-btn')
+  const dayDrop = container.querySelector('#day-dropdown')
+  const dayAndToggle = dayDrop.querySelector('#day-and-toggle')
+  const dayResetBtn = dayDrop.querySelector('#day-dd-reset-btn')
+
+  dayDrop.addEventListener('click', e => e.stopPropagation())
+
+  function updateDayBtn() {
+    dayBtn.classList.toggle('active', filterDays.size > 0)
+    dayBtn.querySelector('.filter-label').textContent = dayBtnLabel()
+  }
+  function updateDayOpts() {
+    dayDrop.querySelectorAll('.filter-opt').forEach(opt => {
+      if (opt.dataset.value === '') {
+        opt.classList.toggle('selected', filterDays.size === 0)
+      } else {
+        opt.classList.toggle('selected', filterDays.has(opt.dataset.value))
+      }
+    })
+  }
+
+  dayBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const isOpen = dayDrop.classList.contains('open')
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+    if (!isOpen) dayDrop.classList.add('open')
+  })
+
+  dayDrop.querySelectorAll('.filter-opt').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const val = opt.dataset.value
+      if (!dayAndMode) {
+        filterDays.clear()
+        if (val) filterDays.add(val)
+        dayDrop.classList.remove('open')
+      } else {
+        if (val === '') {
+          filterDays.clear()
+        } else {
+          filterDays.has(val) ? filterDays.delete(val) : filterDays.add(val)
+        }
+      }
+      updateDayBtn()
+      updateDayOpts()
+      renderClassList()
+    })
+  })
+
+  dayAndToggle.addEventListener('click', (e) => {
+    e.stopPropagation()
+    dayAndMode = !dayAndMode
+    dayAndToggle.classList.toggle('active', dayAndMode)
+    dayAndToggle.dataset.active = String(dayAndMode)
+    if (!dayAndMode && filterDays.size > 1) {
+      const first = [...filterDays][0]
+      filterDays.clear()
+      filterDays.add(first)
+      updateDayBtn()
+      updateDayOpts()
+      renderClassList()
+    }
+  })
+
+  dayResetBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    filterDays.clear()
+    dayAndMode = false
+    dayAndToggle.classList.remove('active')
+    dayAndToggle.dataset.active = 'false'
+    updateDayBtn()
+    updateDayOpts()
+    renderClassList()
+  })
+
+  // 과목 드롭다운 (AND 다중선택)
+  const subjBtn = container.querySelector('#cls-subject-filter-btn')
+  const subjDrop = container.querySelector('#cls-subject-dropdown')
+  const subjAndToggle = subjDrop.querySelector('#cls-subject-and-toggle')
+  const subjResetBtn = subjDrop.querySelector('#cls-subject-dd-reset-btn')
+
+  subjDrop.addEventListener('click', e => e.stopPropagation())
+
+  function updateSubjBtn() {
+    subjBtn.classList.toggle('active', filterSubjects.size > 0)
+    subjBtn.querySelector('.filter-label').textContent = subjectBtnLabel()
+  }
+  function updateSubjOpts() {
+    subjDrop.querySelectorAll('.filter-opt').forEach(opt => {
+      if (opt.dataset.value === '') {
+        opt.classList.toggle('selected', filterSubjects.size === 0)
+      } else {
+        opt.classList.toggle('selected', filterSubjects.has(opt.dataset.value))
+      }
+    })
+  }
+
+  subjBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const isOpen = subjDrop.classList.contains('open')
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+    if (!isOpen) subjDrop.classList.add('open')
+  })
+
+  subjDrop.querySelectorAll('.filter-opt').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const val = opt.dataset.value
+      if (!subjectAndMode) {
+        filterSubjects.clear()
+        if (val) filterSubjects.add(val)
+        subjDrop.classList.remove('open')
+      } else {
+        if (val === '') {
+          filterSubjects.clear()
+        } else {
+          filterSubjects.has(val) ? filterSubjects.delete(val) : filterSubjects.add(val)
+        }
+      }
+      updateSubjBtn()
+      updateSubjOpts()
+      renderClassList()
+    })
+  })
+
+  subjAndToggle.addEventListener('click', (e) => {
+    e.stopPropagation()
+    subjectAndMode = !subjectAndMode
+    subjAndToggle.classList.toggle('active', subjectAndMode)
+    subjAndToggle.dataset.active = String(subjectAndMode)
+    if (!subjectAndMode && filterSubjects.size > 1) {
+      const first = [...filterSubjects][0]
+      filterSubjects.clear()
+      filterSubjects.add(first)
+      updateSubjBtn()
+      updateSubjOpts()
+      renderClassList()
+    }
+  })
+
+  subjResetBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    filterSubjects.clear()
+    subjectAndMode = false
+    subjAndToggle.classList.remove('active')
+    subjAndToggle.dataset.active = 'false'
+    updateSubjBtn()
+    updateSubjOpts()
+    renderClassList()
+  })
+
   await loadClasses()
+}
+
+function bindPeriodDropdown(wrap) {
+  const btn = wrap.querySelector('#period-filter-btn')
+  const drop = wrap.querySelector('#period-dropdown')
+
+  drop.addEventListener('click', e => e.stopPropagation())
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const isOpen = drop.classList.contains('open')
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'))
+    if (!isOpen) drop.classList.add('open')
+  })
+
+  function updatePeriodBtn() {
+    btn.classList.toggle('active', !!onedayPreset)
+    btn.querySelector('.filter-label').textContent = periodBtnLabel()
+  }
+
+  function updatePeriodOpts() {
+    drop.querySelectorAll('.filter-opt').forEach(opt => {
+      opt.classList.toggle('selected', (opt.dataset.preset || '') === (onedayPreset || ''))
+    })
+  }
+
+  drop.querySelectorAll('.filter-opt').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const p = opt.dataset.preset
+      if (p === 'custom') {
+        onedayPreset = 'custom'
+        drop.classList.remove('open')
+        updatePeriodBtn()
+        updatePeriodOpts()
+        openPeriodCustomPicker()
+        return
+      }
+      onedayPreset = p || null
+      onedayFrom = ''; onedayTo = ''
+      drop.classList.remove('open')
+      updatePeriodBtn()
+      updatePeriodOpts()
+      renderClassList()
+    })
+  })
+}
+
+function openPeriodCustomPicker() {
+  const today = new Date().toLocaleDateString('sv-KR')
+  const calId = 'period-custom-cal'
+  let existing = document.getElementById(calId)
+  if (!existing) {
+    existing = document.createElement('div')
+    existing.id = calId
+    existing.className = 'od-calendar-popup'
+    document.body.appendChild(existing)
+  }
+
+  const btn = document.getElementById('period-filter-btn')
+  const rect = btn ? btn.getBoundingClientRect() : { bottom: 100, left: 16 }
+  existing.style.cssText = `position:fixed;top:${rect.bottom + 6}px;left:${rect.left}px;z-index:200`
+  existing.classList.remove('hidden')
+
+  let calTarget = 'from'
+
+  function renderCustomUI() {
+    existing.innerHTML = `
+      <div class="od-custom-header">
+        <button class="od-filter-date-btn${onedayFrom ? ' has-value' : ''}" id="pc-from-btn">${onedayFrom || '시작일'}</button>
+        <span class="od-filter-sep">~</span>
+        <button class="od-filter-date-btn${onedayTo ? ' has-value' : ''}" id="pc-to-btn">${onedayTo || '종료일'}</button>
+      </div>
+      <div id="pc-cal-inner"></div>
+    `
+    existing.querySelector('#pc-from-btn').addEventListener('click', (e) => { e.stopPropagation(); calTarget = 'from'; renderCal() })
+    existing.querySelector('#pc-to-btn').addEventListener('click', (e) => { e.stopPropagation(); calTarget = 'to'; renderCal() })
+    renderCal()
+  }
+
+  function renderCal() {
+    const initDate = calTarget === 'from' ? (onedayFrom || today) : (onedayTo || today)
+    const opts = calTarget === 'from' ? (onedayTo ? { maxDate: onedayTo } : {}) : (onedayFrom ? { minDate: onedayFrom } : {})
+    renderOnedayCalendar('pc-cal-inner', initDate, (d) => {
+      if (calTarget === 'from') { onedayFrom = d; calTarget = 'to' }
+      else { onedayTo = d }
+      renderCustomUI()
+      if (onedayFrom && onedayTo) {
+        existing.classList.add('hidden')
+        document.getElementById('period-filter-btn')?.querySelector('.filter-label') &&
+          (document.getElementById('period-filter-btn').querySelector('.filter-label').textContent = periodBtnLabel())
+        document.getElementById('period-filter-btn')?.classList.add('active')
+        renderClassList()
+      }
+    }, opts)
+  }
+
+  renderCustomUI()
+  setTimeout(() => {
+    document.addEventListener('click', function closeCal(e) {
+      if (!existing.contains(e.target) && e.target.id !== 'period-filter-btn') {
+        existing.classList.add('hidden')
+        document.removeEventListener('click', closeCal)
+      }
+    })
+  }, 50)
 }
 
 async function loadClasses() {
@@ -116,7 +545,15 @@ function renderClassList() {
 
   const isOneday = classTab === 'oneday'
   const filtered = allClasses.filter(cls =>
-    (isOneday ? cls.is_oneday : !cls.is_oneday) && (
+    (isOneday ? cls.is_oneday : !cls.is_oneday) &&
+    (!filterGrade || cls.grade === filterGrade) &&
+    (filterSubjects.size === 0 || (subjectAndMode
+      ? [...filterSubjects].every(sub => cls.subject === sub)
+      : [...filterSubjects].some(sub => cls.subject === sub))) &&
+    (filterDays.size === 0 || (dayAndMode
+      ? [...filterDays].every(d => (cls.days || []).includes(d))
+      : [...filterDays].some(d => (cls.days || []).includes(d)))) &&
+    (
       cls.name.toLowerCase().includes(searchQuery) ||
       (cls.teacher || '').toLowerCase().includes(searchQuery) ||
       (cls.subject || '').toLowerCase().includes(searchQuery)
@@ -127,7 +564,7 @@ function renderClassList() {
     wrap.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">📚</div>
-        <div class="empty-state-text">${searchQuery ? '검색 결과가 없습니다' : (isOneday ? '등록된 보강 수업이 없습니다' : '등록된 수업이 없습니다')}</div>
+        <div class="empty-state-text">${(searchQuery || filterGrade || filterSubjects.size > 0 || filterDays.size > 0) ? '조건에 맞는 수업이 없습니다' : (isOneday ? '등록된 보강 수업이 없습니다' : '등록된 수업이 없습니다')}</div>
       </div>
     `
     return
@@ -135,17 +572,6 @@ function renderClassList() {
 
   if (isOneday) {
     const today = new Date().toLocaleDateString('sv-KR')
-    const PRESET_LABELS = { '1w': '1주일', '1m': '1개월', '2m': '2개월', '3m': '3개월' }
-
-    function computeFrom(preset) {
-      const d = new Date()
-      if (preset === '1w') d.setDate(d.getDate() - 7)
-      else if (preset === '1m') d.setMonth(d.getMonth() - 1)
-      else if (preset === '2m') d.setMonth(d.getMonth() - 2)
-      else if (preset === '3m') d.setMonth(d.getMonth() - 3)
-      return d.toLocaleDateString('sv-KR')
-    }
-
     const sorted = [...filtered].sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))
 
     let dateFiltered = sorted
@@ -156,92 +582,9 @@ function renderClassList() {
       dateFiltered = sorted.filter(cls => (cls.start_date || '') >= onedayFrom && (cls.start_date || '') <= onedayTo)
     }
 
-    const cardsHTML = dateFiltered.length > 0
+    wrap.innerHTML = dateFiltered.length > 0
       ? `<div class="card-list">${dateFiltered.map(cls => onedayCardHTML(cls)).join('')}</div>`
       : `<div class="empty-state"><div class="empty-state-icon">📚</div><div class="empty-state-text">해당 기간에 보강 수업이 없습니다</div></div>`
-
-    wrap.innerHTML = `
-      <div class="oneday-filter-bar">
-        <div class="oneday-preset-row">
-          ${Object.entries(PRESET_LABELS).map(([p, label]) =>
-            `<button class="preset-btn${onedayPreset === p ? ' active' : ''}" data-preset="${p}">${label}</button>`
-          ).join('')}
-          <button class="preset-btn${onedayPreset === 'custom' ? ' active' : ''}" data-preset="custom">직접 설정</button>
-        </div>
-        ${onedayPreset === 'custom' ? `
-        <div class="oneday-custom-row">
-          <button class="od-filter-date-btn${onedayFrom ? ' has-value' : ''}" id="od-filter-from">${onedayFrom || '시작일'}</button>
-          <span class="od-filter-sep">~</span>
-          <button class="od-filter-date-btn${onedayTo ? ' has-value' : ''}" id="od-filter-to">${onedayTo || '종료일'}</button>
-        </div>
-        <div id="od-filter-cal" class="od-calendar-popup hidden"></div>
-        ` : ''}
-      </div>
-      ${cardsHTML}
-    `
-
-    // 프리셋 버튼 바인딩
-    wrap.querySelectorAll('.preset-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const p = btn.dataset.preset
-        if (onedayPreset === p) {
-          onedayPreset = null
-          if (p !== 'custom') { onedayFrom = ''; onedayTo = '' }
-        } else {
-          onedayPreset = p
-          if (p !== 'custom') { onedayFrom = ''; onedayTo = '' }
-        }
-        renderClassList()
-      })
-    })
-
-    // 직접 설정 날짜 피커 바인딩
-    const fromBtn = document.getElementById('od-filter-from')
-    const toBtn = document.getElementById('od-filter-to')
-    const calEl = document.getElementById('od-filter-cal')
-
-    if (fromBtn && toBtn && calEl) {
-      let calTarget = null
-      let calOpen = false
-
-      function closeFilterCal(e) {
-        if (calEl && e && calEl.contains(e.target)) {
-          document.addEventListener('click', closeFilterCal, { once: true })
-          return
-        }
-        calOpen = false
-        calEl.classList.add('hidden')
-      }
-
-      function openFilterCal(target) {
-        calTarget = target
-        calOpen = true
-        calEl.classList.remove('hidden')
-        const initDate = target === 'from' ? (onedayFrom || today) : (onedayTo || today)
-        const calOptions = target === 'from'
-          ? (onedayTo ? { maxDate: onedayTo } : {})
-          : (onedayFrom ? { minDate: onedayFrom } : {})
-        renderOnedayCalendar('od-filter-cal', initDate, (d) => {
-          if (calTarget === 'from') onedayFrom = d
-          else onedayTo = d
-          calOpen = false
-          calEl.classList.add('hidden')
-          renderClassList()
-        }, calOptions)
-        setTimeout(() => {
-          document.addEventListener('click', closeFilterCal, { once: true })
-        }, 50)
-      }
-
-      fromBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        calOpen && calTarget === 'from' ? closeFilterCal(null) : openFilterCal('from')
-      })
-      toBtn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        calOpen && calTarget === 'to' ? closeFilterCal(null) : openFilterCal('to')
-      })
-    }
 
     // 카드 클릭
     wrap.querySelectorAll('.card[data-class-id]').forEach(card => {
@@ -266,7 +609,7 @@ function classCardHTML(cls) {
   const days = cls.days || []
 
   return `
-    <div class="card" data-class-id="${cls.id}">
+    <div class="card${cls.start_date && cls.end_date ? ' card--timelimit' : ' card--regular'}" data-class-id="${cls.id}">
       <div class="class-card-header">
         <div>
           <div class="class-card-name">${cls.name}</div>
@@ -293,7 +636,7 @@ function classCardHTML(cls) {
 function onedayCardHTML(cls) {
   const students = cls.students || []
   return `
-    <div class="card accordion-item--oneday" data-class-id="${cls.id}" style="border-radius:var(--radius);border:1px solid #37212e;cursor:pointer">
+    <div class="card accordion-item--oneday" data-class-id="${cls.id}" style="border-radius:var(--radius);border:1px solid var(--border-oneday);cursor:pointer">
       <div class="class-card-header">
         <div>
           <div class="class-card-name">${cls.name}</div>
