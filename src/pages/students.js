@@ -688,7 +688,8 @@ async function openStudentDetailModal(student) {
       try {
         await upsertStudentToken(student.id, token, expiresAt, from, to)
         const url = `${location.origin}${location.pathname}?name=${encodeURIComponent(student.name)}&report=${token}`
-        const qrDataUrl = await QRCode.toDataURL(url, { width: 180, margin: 1, color: { dark: '#ffffff', light: '#1c1c1f' } })
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+        const qrDataUrl = await QRCode.toDataURL(url, { width: 180, margin: 1, color: { dark: isLight ? '#1c1a24' : '#ffffff', light: isLight ? '#f7f4ed' : '#1c1c1f' } })
 
         const resultEl = panel.querySelector('#lp-result')
         resultEl.style.display = 'block'

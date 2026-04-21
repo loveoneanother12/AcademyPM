@@ -13,6 +13,30 @@ import { isOnline } from './lib/supabase.js'
 
 let currentTab = 'students'
 
+// === 테마 관리 ===
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme)
+  localStorage.setItem('theme', theme)
+  const meta = document.getElementById('meta-theme-color')
+  if (meta) meta.content = theme === 'light' ? '#f0ebe0' : '#111113'
+  const pill = document.getElementById('theme-toggle-btn')
+  if (pill) pill.classList.toggle('is-light', theme === 'light')
+  const label = document.getElementById('theme-toggle-label')
+  if (label) label.textContent = theme === 'light' ? 'Light' : 'Dark'
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('theme') || 'dark'
+  applyTheme(saved)
+  const wrap = document.getElementById('theme-toggle-wrap')
+  if (wrap) {
+    wrap.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark'
+      applyTheme(current === 'dark' ? 'light' : 'dark')
+    })
+  }
+}
+
 const PAGE_RENDERERS = {
   students: renderStudentsPage,
   classes: renderClassesPage,
@@ -69,6 +93,9 @@ async function init() {
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.tab))
   })
+
+  // 테마 초기화
+  initTheme()
 
   // 오프라인 상태 표시
   if (!isOnline) {

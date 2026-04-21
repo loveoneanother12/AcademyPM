@@ -153,7 +153,7 @@ export async function renderClassesPage(container) {
       <h2 class="modal-title">수업 추가</h2>
       <div style="display:flex;gap:12px;padding:8px 0 4px">
         <button class="btn btn-primary" id="type-regular" style="flex:1;padding:16px;font-size:15px">정규수업 추가</button>
-        <button class="btn" id="type-oneday" style="flex:1;padding:16px;font-size:15px;background:#5c1e32;border:1px solid #7a2840;color:#e8c0cc">단회성 / 보강 추가</button>
+        <button class="btn" id="type-oneday" style="flex:1;padding:16px;font-size:15px;background:var(--card-oneday-bg);border:1px solid var(--oneday-border-accent);color:var(--oneday-text)">단회성 / 보강 추가</button>
       </div>
     `, null)
     document.getElementById('type-regular').onclick = () => {

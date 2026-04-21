@@ -3,9 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#0f0f12" />
+  <meta name="theme-color" content="#0f0f12" id="meta-theme-color" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark'
+      document.documentElement.setAttribute('data-theme', t)
+      document.getElementById('meta-theme-color').content = t === 'light' ? '#f0ebe0' : '#111113'
+    })()
+  </script>
   <title>AcademyPM</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -21,7 +28,14 @@
           <span class="logo-icon">✦</span>
           <span class="logo-text">AcademyPM</span>
         </div>
-        <div id="header-actions"></div>
+        <div id="header-actions">
+          <div class="theme-toggle-wrap" id="theme-toggle-wrap" title="테마 전환">
+            <div class="theme-toggle-pill" id="theme-toggle-btn">
+              <div class="theme-toggle-knob"></div>
+            </div>
+            <span class="theme-toggle-label" id="theme-toggle-label">Dark</span>
+          </div>
+        </div>
       </div>
     </header>
 

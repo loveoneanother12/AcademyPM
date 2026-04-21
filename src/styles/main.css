@@ -31,6 +31,20 @@
   --radius: 16px;
   --nav-height: 64px;
   --header-height: 56px;
+
+  /* 수업 타입별 카드 배경 */
+  --card-oneday-bg: #312026;
+  --card-regular-bg: #252230;
+  --border-regular: #322f42;
+  --card-timelimit-bg: #1e2820;
+
+  /* 단회성 수업 강조 색상 */
+  --oneday-text: #e8c0cc;
+  --oneday-border-accent: #a03356;
+  --oneday-filter-selected: #d4758c;
+
+  /* 주간 스트립 활성 날짜 텍스트 (gold 배경 위) */
+  --week-active-text: #1a1a1c;
 }
 
 /* === 리셋 === */
@@ -266,8 +280,8 @@ body {
 }
 
 .sub-tab-btn.active[data-tab="oneday"] {
-  color: #e8c0cc;
-  border-bottom-color: #a03356;
+  color: var(--oneday-text);
+  border-bottom-color: var(--oneday-border-accent);
 }
 
 .search-wrap {
@@ -1278,7 +1292,7 @@ body {
 
 .week-day.active .week-day-num {
   background: var(--gold);
-  color: #1a1a1c;
+  color: var(--week-active-text);
 }
 
 .week-day.today:not(.active) .week-day-num {
@@ -1313,19 +1327,19 @@ body {
 }
 
 .accordion-item--oneday {
-  background: #312026;
+  background: var(--card-oneday-bg);
   border-color: var(--border-oneday);
 }
 
 .card--regular,
 .accordion-item.card--regular {
-  background: #252230;
-  border-color: #322f42;
+  background: var(--card-regular-bg);
+  border-color: var(--border-regular);
 }
 
 .card--timelimit,
 .accordion-item.card--timelimit {
-  background: #1e2820;
+  background: var(--card-timelimit-bg);
   border-color: var(--border-timelimit);
 }
 
@@ -1555,7 +1569,7 @@ body {
 }
 
 .oneday-mode .toggle-btn.active {
-  background: #a03356;
+  background: var(--oneday-border-accent);
 }
 
 .toggle-knob {
@@ -1929,13 +1943,13 @@ body {
 
 /* 수업 탭 단회성 모드 — 필터 버튼 버건디 오버라이드 */
 .oneday-mode .filter-btn.active {
-  border-color: #a03356;
-  color: #e8c0cc;
+  border-color: var(--oneday-border-accent);
+  color: var(--oneday-text);
   background: rgba(160, 51, 86, 0.1);
 }
 
 .oneday-mode .filter-opt.selected {
-  color: #d4758c;
+  color: var(--oneday-filter-selected);
 }
 
 /* 기간 드롭다운 — 우측 끝 정렬 */
@@ -2739,4 +2753,139 @@ body {
   font-size: 15px;
   color: var(--text2);
   line-height: 1.6;
+}
+
+/* ========================================
+   라이트 모드
+   ======================================== */
+
+[data-theme="light"] {
+  /* 배경 레이어 — 크림/종이 계열 */
+  --bg: #f0ebe0;
+  --bg2: #f8f4eb;
+  --bg3: #e2dcd0;
+  --card: #f5f0e6;
+  --border: #d4cebe;
+  --border-oneday: #d8beba;
+  --border-timelimit: #b8c8ba;
+  --surface2: var(--bg3);
+
+  /* 어센트 — 웜톤 배경에 대비되는 보라 계열 유지 */
+  --accent: #6452d8;
+  --accent2: #1a8a72;
+  --accent3: #bf5228;
+  --accent-10: rgba(100, 82, 216, 0.10);
+  --accent-15: rgba(100, 82, 216, 0.15);
+  --accent-20: rgba(100, 82, 216, 0.20);
+  --accent-30: rgba(100, 82, 216, 0.30);
+  --accent-40: rgba(100, 82, 216, 0.40);
+
+  /* 텍스트 — 웜 뉴트럴 */
+  --text: #28231c;
+  --text2: #5a5248;
+  --text3: #988e80;
+
+  /* 시맨틱 색상 — 크림 배경 위 충분한 대비 */
+  --red: #b82c2c;
+  --green: #1e7a50;
+  --yellow: #8a6400;
+  --gold: #a07e00;
+  --blue: #1860a8;
+
+  /* 수업 타입별 카드 — 웜 뉴트럴, 낮은 채도 */
+  --card-oneday-bg: #f2e8e5;
+  --card-regular-bg: #eae6ed;
+  --border-regular: #c4bece;
+  --card-timelimit-bg: #e5ece6;
+
+  /* 단회성 강조 색상 */
+  --oneday-text: #862040;
+  --oneday-border-accent: #a83050;
+  --oneday-filter-selected: #963858;
+
+  /* 주간 스트립 */
+  --week-active-text: #1a1a1c;
+}
+
+/* 라이트 모드 — accordion header active 배경 */
+[data-theme="light"] .accordion-header:active {
+  background: var(--bg3);
+}
+
+/* 라이트 모드 — 검색 아이콘 (어두운 stroke) */
+[data-theme="light"] .search-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2354526a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+}
+
+/* 라이트 모드 — 셀렉트 화살표 아이콘 */
+[data-theme="light"] .form-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2354526a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* 라이트 모드 — 모달 오버레이 투명도 */
+[data-theme="light"] .modal-overlay {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* 라이트 모드 — 필터 드롭다운 그림자 */
+[data-theme="light"] .filter-dropdown {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* 라이트 모드 — 달력 그림자 */
+[data-theme="light"] .calendar-popup {
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* 라이트 모드 — 단회성 모드 토글 onday bg */
+[data-theme="light"] .oneday-mode .filter-btn.active {
+  background: rgba(176, 53, 88, 0.08);
+}
+
+/* 테마 토글 스위치 */
+.theme-toggle-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.theme-toggle-pill {
+  width: 38px;
+  height: 21px;
+  border-radius: 11px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.25s;
+  flex-shrink: 0;
+}
+
+.theme-toggle-pill.is-light {
+  background: var(--accent);
+}
+
+.theme-toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.25s cubic-bezier(0.34, 1.3, 0.64, 1);
+  pointer-events: none;
+}
+
+.theme-toggle-pill.is-light .theme-toggle-knob {
+  transform: translateX(17px);
+}
+
+.theme-toggle-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
 }
