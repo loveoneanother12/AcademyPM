@@ -395,13 +395,15 @@ async function openStudentDetailModal(student) {
     getStudentMemos(null, null, student.id),
   ])
 
-  // 이 학생이 수강 중인 수업만
+  // 이 학생이 수강 중인 수업 (활성 / 완강 분리)
   const myClasses = classes.filter(cls =>
     (cls.students || []).some(s => (typeof s === 'object' ? s.id : s) === student.id)
   )
+  const activeClasses = myClasses.filter(cls => cls.is_completed !== true)
+  const completedClasses = myClasses.filter(cls => cls.is_completed === true)
 
-  // 수업별 데이터 계산
-  const classDataList = myClasses.map(cls => {
+  // 수업별 데이터 계산 헬퍼
+  function calcClassData(cls, idx) {
     const clsAtt = attendanceData.filter(r => r.class_id === cls.id && r.date >= fourWeeksAgo && r.date <= today && !r.is_na)
     const presentCount = clsAtt.filter(r => r.status === 'present').length
     const lateCount = clsAtt.filter(r => r.status === 'late').length
@@ -422,8 +424,11 @@ async function openStudentDetailModal(student) {
       .filter(r => r.class_id === cls.id && r.date >= fourWeeksAgo && r.date <= today && r.memo)
       .sort((a, b) => b.date.localeCompare(a.date))
 
-    return { cls, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores, clsMemos }
-  })
+    return { cls, idx, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores, clsMemos }
+  }
+
+  const classDataList = activeClasses.map((cls, i) => calcClassData(cls, i))
+  const completedDataList = completedClasses.map((cls, i) => calcClassData(cls, activeClasses.length + i))
 
   const subjects = student.subjects || []
   const avatarClass = student.status === 'inactive' ? 'inactive' : (student.gender === '남' ? 'male' : 'female')
@@ -451,90 +456,100 @@ async function openStudentDetailModal(student) {
     <div id="late-note" style="display:none;font-size:11px;color:var(--text3);text-align:right;margin-top:-8px;margin-bottom:10px">지각 1회가 출석 0.5회로 계산됩니다</div>
   `
 
-  const classBoxes = classDataList.length > 0
-    ? classDataList.map(({ cls, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores, clsMemos }, idx) => {
-        const days = (cls.days || []).join(', ')
-        const meta = [days, cls.time].filter(Boolean).join(' · ')
-        const hwColor = hwAvg === null ? 'var(--text3)' : hwAvg >= 80 ? 'var(--green)' : hwAvg >= 50 ? 'var(--yellow)' : 'var(--red)'
-        const initRate = totalCount > 0 ? Math.round((presentCount + lateCount) / totalCount * 100) : null
-        const rateColor = initRate === null ? 'var(--text3)' : initRate >= 80 ? 'var(--green)' : initRate >= 50 ? 'var(--yellow)' : 'var(--red)'
+  function renderClassBox({ cls, idx, presentCount, lateCount, absentCount, totalCount, hwAvg, clsScores, clsMemos }) {
+    const days = (cls.days || []).join(', ')
+    const meta = [days, cls.time].filter(Boolean).join(' · ')
+    const hwColor = hwAvg === null ? 'var(--text3)' : hwAvg >= 80 ? 'var(--green)' : hwAvg >= 50 ? 'var(--yellow)' : 'var(--red)'
+    const initRate = totalCount > 0 ? Math.round((presentCount + lateCount) / totalCount * 100) : null
+    const rateColor = initRate === null ? 'var(--text3)' : initRate >= 80 ? 'var(--green)' : initRate >= 50 ? 'var(--yellow)' : 'var(--red)'
 
-        return `
-          <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:${meta ? '6px' : '10px'}">
-              <span style="font-size:14px;font-weight:700;color:var(--text)">${cls.name}</span>
-              ${cls.subject ? `<span class="subject-tag ${cls.subject}" style="font-size:10px">${cls.subject}</span>` : ''}
-            </div>
-            ${meta ? `<div style="font-size:12px;color:var(--text3);margin-bottom:10px">${meta}</div>` : ''}
-            <div class="detail-stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">
-              <div class="detail-stat-box">
-                <div class="detail-stat-value" style="color:var(--green)">${presentCount}</div>
-                <div class="detail-stat-label">출석</div>
-              </div>
-              <div class="detail-stat-box">
-                <div class="detail-stat-value" style="color:var(--yellow)">${lateCount}</div>
-                <div class="detail-stat-label">지각</div>
-              </div>
-              <div class="detail-stat-box">
-                <div class="detail-stat-value" style="color:var(--red)">${absentCount}</div>
-                <div class="detail-stat-label">결석</div>
-              </div>
-              <div class="detail-stat-box">
-                <div class="detail-stat-value" style="color:var(--text)">${totalCount}</div>
-                <div class="detail-stat-label">총수업</div>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;${clsScores.length > 0 ? 'margin-bottom:10px' : ''}">
-              <div class="report-rate-box">
-                <div id="att-rate-${idx}" class="report-rate-val" style="color:${rateColor}">${initRate !== null ? initRate + '%' : '--'}</div>
-                <div class="report-stat-label">4주 출석률</div>
-              </div>
-              <div class="report-rate-box">
-                <div class="report-rate-val" style="color:${hwColor}">${hwAvg !== null ? hwAvg + '%' : '--'}</div>
-                <div class="report-stat-label">4주 과제 평균</div>
-              </div>
-            </div>
-            ${clsScores.length > 0 ? `
-              <div style="font-size:11px;color:var(--text3);margin-bottom:6px">최근 ${clsScores.length}회 테스트</div>
-              <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px;margin-bottom:8px">
-                ${scoreChartSVG(clsScores)}
-              </div>
-              <div class="report-score-list">
-                ${clsScores.map(s => `
-                  <div class="report-score-row">
-                    <div style="display:flex;flex-direction:column;gap:1px">
-                        ${s.test_name ? `<span style="font-size:12px;color:var(--text)">${s.test_name}</span>` : ''}
-                    <span class="report-score-date">${s.date}</span>
-                    </div>
-                    <span class="report-score-val">${s.score}점</span>
-                  </div>
-                `).join('')}
-              </div>
-            ` : ''}
-
-            ${clsMemos.length > 0 ? `
-              <div style="font-size:11px;color:var(--text3);margin-top:10px;margin-bottom:6px">4주 개인 메모</div>
-              <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px">
-                ${clsMemos.map(m => {
-                  const hasContent = m.memo && m.memo.trim()
-                  return `
-                  <div style="display:flex;flex-direction:column;gap:2px">
-                    <span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${m.date}</span>
-                    <span style="font-size:13px;color:${hasContent ? 'var(--text)' : 'var(--text3)'};line-height:1.5;white-space:pre-wrap">${hasContent ? m.memo : '(작성내용 없음)'}</span>
-                  </div>`
-                }).join('<div style="height:1px;background:var(--border)"></div>')}
-              </div>
-            ` : ''}
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:${meta ? '6px' : '10px'}">
+          <span style="font-size:14px;font-weight:700;color:var(--text)">${cls.name}</span>
+          ${cls.subject ? `<span class="subject-tag ${cls.subject}" style="font-size:10px">${cls.subject}</span>` : ''}
+        </div>
+        ${meta ? `<div style="font-size:12px;color:var(--text3);margin-bottom:10px">${meta}</div>` : ''}
+        <div class="detail-stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">
+          <div class="detail-stat-box">
+            <div class="detail-stat-value" style="color:var(--green)">${presentCount}</div>
+            <div class="detail-stat-label">출석</div>
           </div>
-        `
-      }).join('')
+          <div class="detail-stat-box">
+            <div class="detail-stat-value" style="color:var(--yellow)">${lateCount}</div>
+            <div class="detail-stat-label">지각</div>
+          </div>
+          <div class="detail-stat-box">
+            <div class="detail-stat-value" style="color:var(--red)">${absentCount}</div>
+            <div class="detail-stat-label">결석</div>
+          </div>
+          <div class="detail-stat-box">
+            <div class="detail-stat-value" style="color:var(--text)">${totalCount}</div>
+            <div class="detail-stat-label">총수업</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;${clsScores.length > 0 ? 'margin-bottom:10px' : ''}">
+          <div class="report-rate-box">
+            <div id="att-rate-${idx}" class="report-rate-val" style="color:${rateColor}">${initRate !== null ? initRate + '%' : '--'}</div>
+            <div class="report-stat-label">4주 출석률</div>
+          </div>
+          <div class="report-rate-box">
+            <div class="report-rate-val" style="color:${hwColor}">${hwAvg !== null ? hwAvg + '%' : '--'}</div>
+            <div class="report-stat-label">4주 과제 평균</div>
+          </div>
+        </div>
+        ${clsScores.length > 0 ? `
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">최근 ${clsScores.length}회 테스트</div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px;margin-bottom:8px">
+            ${scoreChartSVG(clsScores)}
+          </div>
+          <div class="report-score-list">
+            ${clsScores.map(s => `
+              <div class="report-score-row">
+                <div style="display:flex;flex-direction:column;gap:1px">
+                  ${s.test_name ? `<span style="font-size:12px;color:var(--text)">${s.test_name}</span>` : ''}
+                  <span class="report-score-date">${s.date}</span>
+                </div>
+                <span class="report-score-val">${s.score}점</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        ${clsMemos.length > 0 ? `
+          <div style="font-size:11px;color:var(--text3);margin-top:10px;margin-bottom:6px">4주 개인 메모</div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px">
+            ${clsMemos.map(m => {
+              const hasContent = m.memo && m.memo.trim()
+              return `
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${m.date}</span>
+                <span style="font-size:13px;color:${hasContent ? 'var(--text)' : 'var(--text3)'};line-height:1.5;white-space:pre-wrap">${hasContent ? m.memo : '(작성내용 없음)'}</span>
+              </div>`
+            }).join('<div style="height:1px;background:var(--border)"></div>')}
+          </div>
+        ` : ''}
+      </div>
+    `
+  }
+
+  const classBoxes = classDataList.length > 0
+    ? classDataList.map(item => renderClassBox(item)).join('')
     : `<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px 0">수강 중인 수업이 없습니다</div>`
+
+  const completedBoxes = completedDataList.length > 0
+    ? `
+      <div style="height:2px;background:var(--border);margin:20px 0 16px;border-radius:1px"></div>
+      <div style="font-size:14px;font-weight:700;color:var(--text3);margin-bottom:12px">종료된 수업</div>
+      ${completedDataList.map(item => renderClassBox(item)).join('')}
+    `
+    : ''
 
   openModal(`
     <h2 class="modal-title">학생 상세</h2>
     ${infoCard}
     ${sectionHeader}
     ${classBoxes}
+    ${completedBoxes}
     <button class="btn btn-primary" id="detail-edit-btn" style="width:100%;margin-top:8px">수정하기</button>
     <button class="btn btn-secondary" id="detail-link-btn" style="width:100%;margin-top:8px">링크 / QR 생성</button>
     <div id="detail-link-panel" style="display:none;margin-top:12px"></div>
@@ -546,7 +561,7 @@ async function openStudentDetailModal(student) {
   const lateNote = document.getElementById('late-note')
 
   function updateAttRates() {
-    classDataList.forEach(({ presentCount, lateCount, totalCount }, idx) => {
+    ;[...classDataList, ...completedDataList].forEach(({ presentCount, lateCount, totalCount, idx }) => {
       const el = document.getElementById('att-rate-' + idx)
       if (!el) return
       if (totalCount === 0) {

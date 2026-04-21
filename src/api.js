@@ -19,9 +19,9 @@ const SAMPLE_STUDENTS = [
 ]
 
 const SAMPLE_CLASSES = [
-  { id: 'c1', name: '고1 수학', subject: '수학', teacher: '현재T', sub_teacher: null, grade: '고1', time: '20-22', days: ['월', '수', '금'], detail_memo: '수학의 정석 2권 진행중. 미적분 단원', is_clinic: false, students: ['s1', 's4'] },
-  { id: 'c2', name: '고2 수학', subject: '수학', teacher: '현재T', sub_teacher: null, grade: '고2', time: '18-20', days: ['화', '목'], detail_memo: '수능 대비 기출 풀이 위주', is_clinic: false, students: ['s2'] },
-  { id: 'c3', name: '중등 국어', subject: '국어', teacher: '지현T', sub_teacher: null, grade: '중3', time: '16-18', days: ['월', '목'], detail_memo: '비문학 독해 강화 훈련', is_clinic: true, students: ['s3', 's5'] },
+  { id: 'c1', name: '고1 수학', subject: '수학', teacher: '현재T', sub_teacher: null, grade: '고1', time: '20-22', days: ['월', '수', '금'], detail_memo: '수학의 정석 2권 진행중. 미적분 단원', is_clinic: false, is_completed: false, students: ['s1', 's4'] },
+  { id: 'c2', name: '고2 수학', subject: '수학', teacher: '현재T', sub_teacher: null, grade: '고2', time: '18-20', days: ['화', '목'], detail_memo: '수능 대비 기출 풀이 위주', is_clinic: false, is_completed: false, students: ['s2'] },
+  { id: 'c3', name: '중등 국어', subject: '국어', teacher: '지현T', sub_teacher: null, grade: '중3', time: '16-18', days: ['월', '목'], detail_memo: '비문학 독해 강화 훈련', is_clinic: true, is_completed: false, students: ['s3', 's5'] },
 ]
 
 // 오프라인 모드 인메모리 스토어

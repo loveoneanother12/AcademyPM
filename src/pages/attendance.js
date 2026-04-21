@@ -326,7 +326,22 @@ async function loadAttendanceData() {
   testScoreCache = {}
   studentMemoCache = {}
 
-  ;[allClasses, allStudents] = await Promise.all([getClasses(), getStudents()])
+  let [classes, students] = await Promise.all([getClasses(), getStudents()])
+
+  // 기간한정 수업 자동 완강
+  const today = new Date().toLocaleDateString('sv-KR')
+  const toComplete = classes.filter(cls =>
+    !cls.is_oneday && cls.end_date && today > cls.end_date && cls.is_completed !== true
+  )
+  if (toComplete.length > 0) {
+    await Promise.all(toComplete.map(cls => updateRow('classes', cls.id, { is_completed: true })))
+    classes = classes.map(cls =>
+      toComplete.some(c => c.id === cls.id) ? { ...cls, is_completed: true } : cls
+    )
+  }
+
+  allClasses = classes
+  allStudents = students
 
   // 현재 날짜의 출석 데이터 전체 로드
   const attRows = await getAttendance(currentDate)
@@ -359,6 +374,7 @@ function renderAccordionList() {
 
   const dow = DAY_LABELS[new Date(currentDate + 'T00:00:00').getDay()]
   const todayClasses = allClasses.filter(cls => {
+    if (cls.is_completed === true) return false
     if (cls.is_oneday) return cls.start_date === currentDate
     if (!(cls.days || []).includes(dow)) return false
     if (cls.start_date && currentDate < cls.start_date) return false

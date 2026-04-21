@@ -28,6 +28,7 @@ let filterSubjects = new Set()
 let subjectAndMode = false
 let filterDays = new Set()
 let dayAndMode = false
+let showCompleted = false
 let _closeDropdowns = null
 
 function escapeHtml(str) {
@@ -523,8 +524,22 @@ function openPeriodCustomPicker() {
   }, 50)
 }
 
+async function autoCompleteExpiredClasses(classes) {
+  const today = new Date().toLocaleDateString('sv-KR')
+  const toComplete = classes.filter(cls =>
+    !cls.is_oneday && cls.end_date && today > cls.end_date && cls.is_completed !== true
+  )
+  if (toComplete.length === 0) return classes
+  await Promise.all(toComplete.map(cls => updateRow('classes', cls.id, { is_completed: true })))
+  return classes.map(cls =>
+    toComplete.some(c => c.id === cls.id) ? { ...cls, is_completed: true } : cls
+  )
+}
+
 async function loadClasses() {
-  ;[allClasses, allStudents] = await Promise.all([getClasses(), getStudents()])
+  let [classes, students] = await Promise.all([getClasses(), getStudents()])
+  allClasses = await autoCompleteExpiredClasses(classes)
+  allStudents = students
   renderClassList()
 }
 
@@ -594,28 +609,57 @@ function renderClassList() {
       })
     })
   } else {
-    wrap.innerHTML = `<div class="card-list">${filtered.map(cls => classCardHTML(cls)).join('')}</div>`
+    const active = filtered.filter(cls => cls.is_completed !== true)
+    const completed = filtered.filter(cls => cls.is_completed === true)
+
+    if (active.length === 0 && completed.length > 0) showCompleted = true
+
+    let html = ''
+    if (active.length > 0) {
+      html += `<div class="card-list">${active.map(cls => classCardHTML(cls)).join('')}</div>`
+    }
+    if (completed.length > 0) {
+      html += `<button class="completed-toggle-btn" id="completed-toggle-btn">${showCompleted ? '지난 수업 접기 ▲' : '지난 수업 보기 ▼'}</button>`
+      if (showCompleted) {
+        html += `
+          <div class="completed-section-divider"></div>
+          <div class="completed-section-label">종료된 수업</div>
+          <div class="card-list">${completed.map(cls => classCardHTML(cls, true)).join('')}</div>
+        `
+      }
+    }
+
+    wrap.innerHTML = html
+
+    wrap.querySelector('#completed-toggle-btn')?.addEventListener('click', () => {
+      showCompleted = !showCompleted
+      renderClassList()
+    })
+
     wrap.querySelectorAll('.card[data-class-id]').forEach(card => {
       card.addEventListener('click', () => {
-        const cls = filtered.find(c => c.id === card.dataset.classId)
+        const cls = [...active, ...completed].find(c => c.id === card.dataset.classId)
         if (cls) openClassDetailModal(cls)
       })
     })
   }
 }
 
-function classCardHTML(cls) {
+function classCardHTML(cls, isCompletedSection = false) {
   const students = cls.students || []
   const days = cls.days || []
 
   return `
-    <div class="card${cls.start_date && cls.end_date ? ' card--timelimit' : ' card--regular'}" data-class-id="${cls.id}">
+    <div class="card${cls.start_date && cls.end_date ? ' card--timelimit' : ' card--regular'}${isCompletedSection ? ' card--completed' : ''}" data-class-id="${cls.id}">
       <div class="class-card-header">
         <div>
           <div class="class-card-name">${cls.name}</div>
           <div class="class-card-meta">${cls.teacher ? cls.teacher + ' · ' : ''}${cls.grade || ''}</div>
         </div>
-        <span class="subject-tag ${cls.subject || ''}">${cls.subject || ''}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <span class="subject-tag ${cls.subject || ''}">${cls.subject || ''}</span>
+          ${isCompletedSection ? '<span class="completed-badge">완강</span>' : ''}
+        </div>
       </div>
       <div class="class-card-footer">
         <div class="class-card-days">
@@ -724,11 +768,39 @@ async function openClassDetailModal(cls) {
       </div>
     ` : ''}
 
+    ${cls.is_completed ? '<div style="font-size:12px;color:var(--text3);text-align:center;padding:4px 0 0">이 수업은 완강 처리되었습니다</div>' : ''}
     <div class="detail-action-row">
+      ${!cls.is_oneday ? `<button class="btn ${cls.is_completed ? 'btn-secondary' : 'btn-complete'}" id="cls-complete-btn">${cls.is_completed ? '완강 취소' : '완강 처리'}</button>` : ''}
       <button class="btn btn-secondary" id="cls-edit-btn">수정</button>
       <button class="btn btn-danger" id="cls-delete-btn">삭제</button>
     </div>
   `)
+
+  document.getElementById('cls-complete-btn')?.addEventListener('click', () => {
+    const willComplete = !cls.is_completed
+    openModal(`
+      <h2 class="modal-title">${willComplete ? '완강 처리' : '완강 취소'}</h2>
+      <p style="font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.6">
+        <strong style="color:var(--text)">${cls.name}</strong> 수업을<br>
+        ${willComplete ? '완강 처리하시겠습니까? 출석·수업 탭에서 숨겨집니다.' : '완강 취소하시겠습니까? 다시 활성 수업으로 복원됩니다.'}
+      </p>
+      <div class="form-actions">
+        <button class="btn btn-secondary" id="comp-cancel">취소</button>
+        <button class="btn ${willComplete ? 'btn-complete' : 'btn-secondary'}" id="comp-confirm">${willComplete ? '완강 처리' : '완강 취소'}</button>
+      </div>
+    `)
+    document.getElementById('comp-cancel').onclick = () => openClassDetailModal(cls)
+    document.getElementById('comp-confirm').onclick = async () => {
+      try {
+        await updateRow('classes', cls.id, { is_completed: willComplete })
+        showToast(willComplete ? '완강 처리되었습니다' : '완강이 취소되었습니다', 'success')
+        closeModal()
+        await loadClasses()
+      } catch (e) {
+        showToast('저장 실패: ' + e.message, 'error')
+      }
+    }
+  })
 
   document.getElementById('cls-edit-btn').onclick = () => openEditClassModal(cls)
   document.getElementById('cls-delete-btn').onclick = () => confirmDeleteClass(cls)

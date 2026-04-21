@@ -147,3 +147,6 @@ alter table test_scores    add column if not exists test_slot integer default 0;
 alter table test_scores    drop constraint if exists test_scores_date_class_id_student_id_key;
 alter table test_scores    drop constraint if exists test_scores_unique_slot;
 alter table test_scores    add constraint test_scores_unique_slot unique(date, class_id, student_id, test_slot);
+
+-- 완강 처리 (정규수업·기간한정 수업용)
+alter table classes add column if not exists is_completed boolean default false;
