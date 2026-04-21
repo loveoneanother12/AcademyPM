@@ -428,7 +428,22 @@ async function openStudentDetailModal(student) {
   }
 
   const classDataList = activeClasses.map((cls, i) => calcClassData(cls, i))
-  const completedDataList = completedClasses.map((cls, i) => calcClassData(cls, activeClasses.length + i))
+
+  // 이전 수업 기록: 현재 미수강이지만 출결/점수/메모 데이터가 있는 수업
+  const enrolledClassIds = new Set(myClasses.map(cls => cls.id))
+  const historicalClassIds = new Set([
+    ...attendanceData.map(r => r.class_id),
+    ...testScoreData.map(r => r.class_id),
+    ...studentMemoData.map(r => r.class_id),
+  ])
+  const pastClasses = classes.filter(cls =>
+    historicalClassIds.has(cls.id) && !enrolledClassIds.has(cls.id)
+  )
+  const pastDataList = pastClasses.map((cls, i) => calcClassData(cls, activeClasses.length + i))
+
+  const completedDataList = completedClasses.map((cls, i) =>
+    calcClassData(cls, activeClasses.length + pastClasses.length + i)
+  )
 
   const subjects = student.subjects || []
   const avatarClass = student.status === 'inactive' ? 'inactive' : (student.gender === '남' ? 'male' : 'female')
@@ -536,6 +551,14 @@ async function openStudentDetailModal(student) {
     ? classDataList.map(item => renderClassBox(item)).join('')
     : `<div style="font-size:13px;color:var(--text3);text-align:center;padding:16px 0">수강 중인 수업이 없습니다</div>`
 
+  const pastBoxes = pastDataList.length > 0
+    ? `
+      <div style="height:2px;background:var(--border);margin:20px 0 16px;border-radius:1px"></div>
+      <div style="font-size:14px;font-weight:700;color:var(--text3);margin-bottom:12px">이전 수업 기록</div>
+      ${pastDataList.map(item => renderClassBox(item)).join('')}
+    `
+    : ''
+
   const completedBoxes = completedDataList.length > 0
     ? `
       <div style="height:2px;background:var(--border);margin:20px 0 16px;border-radius:1px"></div>
@@ -549,6 +572,7 @@ async function openStudentDetailModal(student) {
     ${infoCard}
     ${sectionHeader}
     ${classBoxes}
+    ${pastBoxes}
     ${completedBoxes}
     <button class="btn btn-primary" id="detail-edit-btn" style="width:100%;margin-top:8px">수정하기</button>
     <button class="btn btn-secondary" id="detail-link-btn" style="width:100%;margin-top:8px">링크 / QR 생성</button>
@@ -561,7 +585,7 @@ async function openStudentDetailModal(student) {
   const lateNote = document.getElementById('late-note')
 
   function updateAttRates() {
-    ;[...classDataList, ...completedDataList].forEach(({ presentCount, lateCount, totalCount, idx }) => {
+    ;[...classDataList, ...pastDataList, ...completedDataList].forEach(({ presentCount, lateCount, totalCount, idx }) => {
       const el = document.getElementById('att-rate-' + idx)
       if (!el) return
       if (totalCount === 0) {
@@ -586,6 +610,27 @@ async function openStudentDetailModal(student) {
   }
 
   document.getElementById('detail-edit-btn').onclick = () => openEditStudentModal(student)
+
+  function scrollSheetToBottom(doubleRaf = false) {
+    const run = () => {
+      const sheet = document.getElementById('modal-sheet')
+      if (!sheet) return
+      const start = sheet.scrollTop
+      const end = sheet.scrollHeight
+      const duration = 420
+      const startTime = performance.now()
+      function step(now) {
+        const t = Math.min((now - startTime) / duration, 1)
+        const ease = 1 - Math.pow(1 - t, 3)
+        sheet.scrollTop = start + (end - start) * ease
+        if (t < 1) requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
+    }
+    doubleRaf
+      ? requestAnimationFrame(() => requestAnimationFrame(run))
+      : requestAnimationFrame(run)
+  }
 
   document.getElementById('detail-link-btn').onclick = () => {
     const panel = document.getElementById('detail-link-panel')
@@ -614,6 +659,7 @@ async function openStudentDetailModal(student) {
         <div id="lp-result" style="display:none;margin-top:12px"></div>
       </div>
     `
+    scrollSheetToBottom()
 
     panel.querySelectorAll('.expiry-opt').forEach(btn => {
       btn.onclick = () => {
@@ -662,6 +708,7 @@ async function openStudentDetailModal(student) {
         resultEl.querySelector('#lp-copy').onclick = () => {
           navigator.clipboard.writeText(url).then(() => showToast('링크 복사됨', 'success'))
         }
+        scrollSheetToBottom(true)
       } catch (e) {
         showToast('생성 실패: ' + e.message, 'error')
       } finally {

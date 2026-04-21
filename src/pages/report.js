@@ -37,10 +37,11 @@ export async function renderReportPage(container, token) {
     return
   }
 
-  const { attendance, testScores, memos, classes } = reportData
+  const { attendance, testScores, memos, classes, pastClasses } = reportData
 
-  // 수업별로 데이터 집계
-  const classStats = classes.map(cls => {
+  // 수업별 데이터 집계 헬퍼
+  function buildClassStats(classList) {
+    return classList.map(cls => {
     const attRows = attendance.filter(r => r.class_id === cls.id && !r.is_na)
     const total = attRows.length
     const present = attRows.filter(r => r.status === 'present').length
@@ -49,7 +50,7 @@ export async function renderReportPage(container, token) {
     const attRate = total > 0 ? Math.round((present + late) / total * 100) : null
     const hwRows = attRows.filter(r => r.homework_pct != null)
     const hwAvg = hwRows.length > 0 ? Math.round(hwRows.reduce((s, r) => s + r.homework_pct, 0) / hwRows.length) : null
-    const clsScores = testScores.filter(r => r.class_id === cls.id)
+    const clsScores = testScores.filter(r => r.class_id === cls.id && r.score !== null && r.score !== undefined)
     const clsMemoMap = Object.fromEntries(
       memos.filter(r => r.class_id === cls.id).map(m => [m.date, m.memo])
     )
@@ -61,8 +62,12 @@ export async function renderReportPage(container, token) {
         memo: clsMemoMap[r.date] ?? null,
         status: r.status,
       }))
-    return { cls, total, present, late, absent, attRate, hwAvg, clsScores, clsMemoRows }
-  }).filter(s => s.total > 0 || s.clsScores.length > 0 || s.clsMemoRows.length > 0)
+      return { cls, total, present, late, absent, attRate, hwAvg, clsScores, clsMemoRows }
+    }).filter(s => s.total > 0 || s.clsScores.length > 0 || s.clsMemoRows.length > 0)
+  }
+
+  const classStats = buildClassStats(classes)
+  const pastClassStats = buildClassStats(pastClasses)
 
   const avatarClass = student.gender === '남' ? 'male' : 'female'
   const fmtDate = d => d ? d.replace(/-/g, '.') : ''
@@ -84,92 +89,105 @@ export async function renderReportPage(container, token) {
         </div>
       </div>
 
-      ${classStats.length === 0 ? `
+      ${classStats.length === 0 && pastClassStats.length === 0 ? `
         <div class="report-empty">해당 기간에 기록된 데이터가 없습니다.</div>
-      ` : classStats.map(({ cls, total, present, late, absent, attRate, hwAvg, clsScores, clsMemoRows }) => `
-        <div class="report-class-block">
-          <div class="report-class-header">
-            <span class="report-class-name">${cls.name}</span>
-            <span class="subject-tag ${cls.subject || ''}" style="font-size:11px;padding:2px 8px">${cls.subject || ''}</span>
-          </div>
-          <div class="report-class-teacher">
-            ${cls.teacher || ''}
-            ${cls.sub_teacher ? `<span style="font-size:11px;color:var(--text3)"> (보조강사: ${cls.sub_teacher})</span>` : ''}
-          </div>
+      ` : ''}
 
-          ${total > 0 ? `
-            <div class="report-stat-grid">
-              <div class="report-stat-box">
-                <div class="report-stat-val green">${present}</div>
-                <div class="report-stat-label">출석</div>
-              </div>
-              <div class="report-stat-box">
-                <div class="report-stat-val yellow">${late}</div>
-                <div class="report-stat-label">지각</div>
-              </div>
-              <div class="report-stat-box">
-                <div class="report-stat-val red">${absent}</div>
-                <div class="report-stat-label">결석</div>
-              </div>
-              <div class="report-stat-box">
-                <div class="report-stat-val">${total}</div>
-                <div class="report-stat-label">총수업</div>
-              </div>
-            </div>
-            <div class="report-rate-grid">
-              <div class="report-rate-box">
-                <div class="report-rate-val">${attRate != null ? attRate + '%' : '--'}</div>
-                <div class="report-stat-label">출석률</div>
-              </div>
-              <div class="report-rate-box">
-                <div class="report-rate-val">${hwAvg != null ? hwAvg + '%' : '--'}</div>
-                <div class="report-stat-label">과제 평균</div>
-              </div>
-            </div>
-          ` : ''}
+      ${classStats.map(renderClassBlock).join('')}
 
-          ${clsScores.length > 0 ? `
-            <div class="report-section-title">테스트 결과</div>
-            ${clsScores.length >= 2 ? `
-              <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px;margin-bottom:8px">
-                ${scoreChartSVG([...clsScores].reverse())}
-              </div>
-            ` : ''}
-            <div class="report-score-list">
-              ${clsScores.map(s => `
-                <div class="report-score-row">
-                  <div style="display:flex;flex-direction:column;gap:1px">
-                    ${s.test_name ? `<span style="font-size:12px;color:var(--text)">${s.test_name}</span>` : ''}
-                    <span class="report-score-date">${fmtDate(s.date)}</span>
-                  </div>
-                  <span class="report-score-val">${s.score}점</span>
-                </div>
-              `).join('')}
-            </div>
-          ` : ''}
-
-          ${clsMemoRows.length > 0 ? `
-            <div class="report-section-title">강사 메모</div>
-            <div class="report-memo-list">
-              ${clsMemoRows.map(r => {
-                const hasContent = r.memo && r.memo.trim()
-                const placeholder = r.status === 'absent' ? '(결석)' : '(특이사항 없음)'
-                return `
-                <div class="report-memo-row">
-                  <div class="report-score-date">${fmtDate(r.date)}</div>
-                  <div class="report-memo-text" style="color:${hasContent ? 'var(--text)' : 'var(--text3)'}">
-                    ${hasContent ? escapeHtml(r.memo) : placeholder}
-                  </div>
-                </div>`
-              }).join('')}
-            </div>
-          ` : ''}
-        </div>
-      `).join('')}
+      ${pastClassStats.length > 0 ? `
+        <div style="height:2px;background:var(--border);margin:20px 0 16px;border-radius:1px"></div>
+        <div style="font-size:13px;font-weight:700;color:var(--text3);margin-bottom:12px;letter-spacing:.3px">이전 수업 기록</div>
+        ${pastClassStats.map(renderClassBlock).join('')}
+      ` : ''}
 
       <div class="report-footer">
         이 페이지는 ${fmtDate(tokenRecord.expires_at?.slice(0, 10))}까지 유효합니다
       </div>
+    </div>
+  `
+}
+
+function renderClassBlock({ cls, total, present, late, absent, attRate, hwAvg, clsScores, clsMemoRows }) {
+  const fmtDate = d => d ? d.replace(/-/g, '.') : ''
+  return `
+    <div class="report-class-block">
+      <div class="report-class-header">
+        <span class="report-class-name">${cls.name}</span>
+        <span class="subject-tag ${cls.subject || ''}" style="font-size:11px;padding:2px 8px">${cls.subject || ''}</span>
+      </div>
+      <div class="report-class-teacher">
+        ${cls.teacher || ''}
+        ${cls.sub_teacher ? `<span style="font-size:11px;color:var(--text3)"> (보조강사: ${cls.sub_teacher})</span>` : ''}
+      </div>
+
+      ${total > 0 ? `
+        <div class="report-stat-grid">
+          <div class="report-stat-box">
+            <div class="report-stat-val green">${present}</div>
+            <div class="report-stat-label">출석</div>
+          </div>
+          <div class="report-stat-box">
+            <div class="report-stat-val yellow">${late}</div>
+            <div class="report-stat-label">지각</div>
+          </div>
+          <div class="report-stat-box">
+            <div class="report-stat-val red">${absent}</div>
+            <div class="report-stat-label">결석</div>
+          </div>
+          <div class="report-stat-box">
+            <div class="report-stat-val">${total}</div>
+            <div class="report-stat-label">총수업</div>
+          </div>
+        </div>
+        <div class="report-rate-grid">
+          <div class="report-rate-box">
+            <div class="report-rate-val">${attRate != null ? attRate + '%' : '--'}</div>
+            <div class="report-stat-label">출석률</div>
+          </div>
+          <div class="report-rate-box">
+            <div class="report-rate-val">${hwAvg != null ? hwAvg + '%' : '--'}</div>
+            <div class="report-stat-label">과제 평균</div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${clsScores.length > 0 ? `
+        <div class="report-section-title">테스트 결과</div>
+        ${clsScores.length >= 2 ? `
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 10px 4px;margin-bottom:8px">
+            ${scoreChartSVG([...clsScores].reverse())}
+          </div>
+        ` : ''}
+        <div class="report-score-list">
+          ${clsScores.map(s => `
+            <div class="report-score-row">
+              <div style="display:flex;flex-direction:column;gap:1px">
+                ${s.test_name ? `<span style="font-size:12px;color:var(--text)">${s.test_name}</span>` : ''}
+                <span class="report-score-date">${fmtDate(s.date)}</span>
+              </div>
+              <span class="report-score-val">${s.score}점</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${clsMemoRows.length > 0 ? `
+        <div class="report-section-title">강사 메모</div>
+        <div class="report-memo-list">
+          ${clsMemoRows.map(r => {
+            const hasContent = r.memo && r.memo.trim()
+            const placeholder = r.status === 'absent' ? '(결석)' : '(특이사항 없음)'
+            return `
+            <div class="report-memo-row">
+              <div class="report-score-date">${fmtDate(r.date)}</div>
+              <div class="report-memo-text" style="color:${hasContent ? 'var(--text)' : 'var(--text3)'}">
+                ${hasContent ? escapeHtml(r.memo) : placeholder}
+              </div>
+            </div>`
+          }).join('')}
+        </div>
+      ` : ''}
     </div>
   `
 }

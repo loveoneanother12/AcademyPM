@@ -438,7 +438,7 @@ export async function getStudentToken(token) {
 }
 
 export async function getStudentReportData(studentId, dataFrom, dataTo) {
-  if (!isOnline) return { attendance: [], testScores: [], memos: [], classes: [] }
+  if (!isOnline) return { attendance: [], testScores: [], memos: [], classes: [], pastClasses: [] }
   const [attRes, scoreRes, memoRes, classRes] = await Promise.all([
     supabase.from('attendance').select('*')
       .eq('student_id', studentId)
@@ -459,11 +459,30 @@ export async function getStudentReportData(studentId, dataFrom, dataTo) {
   if (scoreRes.error) handleError(scoreRes.error, 'getStudentReportData/scores')
   if (memoRes.error) handleError(memoRes.error, 'getStudentReportData/memos')
   if (classRes.error) handleError(classRes.error, 'getStudentReportData/classes')
+
+  // 현재 미수강이지만 기간 내 데이터가 있는 이전 수업
+  const enrolledIds = new Set((classRes.data || []).map(c => c.id))
+  const historicalIds = new Set([
+    ...(attRes.data || []).map(r => r.class_id),
+    ...(scoreRes.data || []).map(r => r.class_id),
+    ...(memoRes.data || []).map(r => r.class_id),
+  ])
+  const pastIds = [...historicalIds].filter(id => !enrolledIds.has(id))
+
+  let pastClasses = []
+  if (pastIds.length > 0) {
+    const { data: pastData, error: pastErr } = await supabase
+      .from('classes').select('*').in('id', pastIds)
+    if (pastErr) handleError(pastErr, 'getStudentReportData/pastClasses')
+    pastClasses = pastData || []
+  }
+
   return {
     attendance: attRes.data || [],
     testScores: scoreRes.data || [],
     memos: memoRes.data || [],
     classes: classRes.data || [],
+    pastClasses,
   }
 }
 
