@@ -85,7 +85,7 @@ export async function renderStudentsPage(container) {
   `
 
   // FAB 버튼
-  document.getElementById('header-actions').innerHTML = ''
+  document.querySelector('#header-actions .fab')?.remove()
   let fab = document.querySelector('.fab')
   if (!fab) {
     fab = document.createElement('button')
@@ -655,15 +655,27 @@ async function openStudentDetailModal(student) {
           <button class="expiry-opt" data-days="90">3개월</button>
           <button class="expiry-opt" data-days="0">무기한</button>
         </div>
+        <div class="form-label" style="margin-bottom:8px;margin-top:12px">테마 설정</div>
+        <div class="link-expiry-options" id="lp-theme">
+          <button class="expiry-opt${document.documentElement.getAttribute('data-theme') !== 'light' ? ' selected' : ''}" data-theme="dark">다크모드</button>
+          <button class="expiry-opt${document.documentElement.getAttribute('data-theme') === 'light' ? ' selected' : ''}" data-theme="light">라이트모드</button>
+        </div>
         <button class="btn btn-primary" id="lp-generate" style="width:100%;margin-top:12px">링크 생성</button>
         <div id="lp-result" style="display:none;margin-top:12px"></div>
       </div>
     `
     scrollSheetToBottom()
 
-    panel.querySelectorAll('.expiry-opt').forEach(btn => {
+    panel.querySelectorAll('#lp-expiry .expiry-opt').forEach(btn => {
       btn.onclick = () => {
-        panel.querySelectorAll('.expiry-opt').forEach(b => b.classList.remove('selected'))
+        panel.querySelectorAll('#lp-expiry .expiry-opt').forEach(b => b.classList.remove('selected'))
+        btn.classList.add('selected')
+      }
+    })
+
+    panel.querySelectorAll('#lp-theme .expiry-opt').forEach(btn => {
+      btn.onclick = () => {
+        panel.querySelectorAll('#lp-theme .expiry-opt').forEach(b => b.classList.remove('selected'))
         btn.classList.add('selected')
       }
     })
@@ -675,10 +687,11 @@ async function openStudentDetailModal(student) {
         showToast('기간을 올바르게 설정하세요', 'error')
         return
       }
-      const days = parseInt(panel.querySelector('.expiry-opt.selected')?.dataset.days || '30')
+      const days = parseInt(panel.querySelector('#lp-expiry .expiry-opt.selected')?.dataset.days || '30')
       const expiresAt = days === 0
         ? new Date('2099-12-31').toISOString()
         : new Date(Date.now() + days * 864e5).toISOString()
+      const reportTheme = panel.querySelector('#lp-theme .expiry-opt.selected')?.dataset.theme || 'dark'
 
       const token = crypto.randomUUID()
       const generateBtn = panel.querySelector('#lp-generate')
@@ -687,8 +700,8 @@ async function openStudentDetailModal(student) {
 
       try {
         await upsertStudentToken(student.id, token, expiresAt, from, to)
-        const url = `${location.origin}${location.pathname}?name=${encodeURIComponent(student.name)}&report=${token}`
-        const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+        const url = `${location.origin}${location.pathname}?name=${encodeURIComponent(student.name)}&report=${token}&theme=${reportTheme}`
+        const isLight = reportTheme === 'light'
         const qrDataUrl = await QRCode.toDataURL(url, { width: 180, margin: 1, color: { dark: isLight ? '#1c1a24' : '#ffffff', light: isLight ? '#f7f4ed' : '#1c1c1f' } })
 
         const resultEl = panel.querySelector('#lp-result')
@@ -789,6 +802,7 @@ function buildStudentFormHTML(mode, student = null) {
       <button class="btn btn-secondary" id="sf-cancel">취소</button>
       <button class="btn btn-primary" id="sf-submit">${mode === 'add' ? '추가' : '저장'}</button>
     </div>
+    ${mode === 'edit' ? `<button class="btn btn-danger" id="sf-delete" style="width:100%;margin-top:8px">삭제</button>` : ''}
   `
 }
 
@@ -810,6 +824,8 @@ function setupStudentForm(mode, student) {
   })
 
   document.getElementById('sf-cancel').onclick = closeModal
+  const delBtn = document.getElementById('sf-delete')
+  if (delBtn) delBtn.onclick = () => confirmDeleteStudent(student)
 
   document.getElementById('sf-submit').onclick = async () => {
     const name = document.getElementById('sf-name').value.trim()

@@ -78,13 +78,16 @@ async function navigateTo(tab) {
 
 async function init() {
   // 공유 링크 모드: ?report=TOKEN
-  const reportToken = new URLSearchParams(window.location.search).get('report')
+  const params = new URLSearchParams(window.location.search)
+  const reportToken = params.get('report')
   if (reportToken) {
     // 앱 UI 숨기고 리포트 페이지만 표시
     document.getElementById('app-header')?.style.setProperty('display', 'none')
     document.getElementById('bottom-nav')?.style.setProperty('display', 'none')
     const content = document.getElementById('page-content')
     content.style.paddingBottom = '0'
+    const reportTheme = params.get('theme') === 'light' ? 'light' : 'dark'
+    applyTheme(reportTheme)
     await renderReportPage(content, reportToken)
     return
   }
