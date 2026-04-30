@@ -11,7 +11,7 @@ import { renderResultsPage } from './pages/results.js'
 import { renderReportPage } from './pages/report.js'
 import { renderLoginPage } from './pages/login.js'
 import { supabase, isOnline } from './lib/supabase.js'
-import { clearAcademyIdCache } from './api.js'
+import { clearAcademyIdCache, getMyAcademy } from './api.js'
 import { openModal, closeModal } from './components/modal.js'
 import { showToast } from './components/toast.js'
 
@@ -161,6 +161,16 @@ async function init() {
 
     actions.prepend(logoutBtn)
     actions.prepend(settingsBtn)
+
+    // 헤더 로고 옆에 학원명 표시
+    getMyAcademy().then(name => {
+      if (!name) return
+      const logoWrap = document.querySelector('.header-logo')
+      const tag = document.createElement('span')
+      tag.className = 'header-academy-name'
+      tag.textContent = name
+      logoWrap.appendChild(tag)
+    })
   }
 
   // 탭 클릭 이벤트

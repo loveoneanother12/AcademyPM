@@ -61,6 +61,16 @@ export function clearAcademyIdCache() {
   cachedAcademyId = null
 }
 
+export async function getMyAcademy() {
+  if (!isOnline) return null
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('academies(name)')
+    .single()
+  if (error) return null
+  return data?.academies?.name ?? null
+}
+
 // ========================================
 // 조회 함수
 // ========================================
