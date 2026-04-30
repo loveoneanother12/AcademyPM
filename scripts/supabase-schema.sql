@@ -359,3 +359,97 @@ grant execute on function get_student_report(text) to anon, authenticated;
 
 -- 3단계: 율에듀 계정 유저 ID 확인 (auth.users 테이블에서 확인)
 -- insert into profiles (user_id, academy_id, role) values ('유저_UUID', '학원_UUID', 'owner');
+
+-- ============================================================
+-- Superadmin 마이그레이션
+-- ============================================================
+
+-- superadmin 헬퍼 함수
+create or replace function is_superadmin()
+returns boolean language sql stable security definer
+as $$ select exists (select 1 from profiles where user_id = auth.uid() and role = 'superadmin') $$;
+
+-- academies: superadmin은 모든 학원 조회 가능
+drop policy if exists "academies_select" on academies;
+create policy "academies_select" on academies for select
+  using (id = get_my_academy_id() or is_superadmin());
+
+-- profiles: superadmin은 모든 프로필 조회 가능
+drop policy if exists "profiles_select" on profiles;
+create policy "profiles_select" on profiles for select
+  using (user_id = auth.uid() or is_superadmin());
+
+-- students
+drop policy if exists "students_select" on students;
+drop policy if exists "students_insert" on students;
+drop policy if exists "students_update" on students;
+drop policy if exists "students_delete" on students;
+create policy "students_select" on students for select using (academy_id = get_my_academy_id() or is_superadmin());
+create policy "students_insert" on students for insert with check (academy_id = get_my_academy_id() or is_superadmin());
+create policy "students_update" on students for update using (academy_id = get_my_academy_id() or is_superadmin());
+create policy "students_delete" on students for delete using (academy_id = get_my_academy_id() or is_superadmin());
+
+-- classes
+drop policy if exists "classes_select" on classes;
+drop policy if exists "classes_insert" on classes;
+drop policy if exists "classes_update" on classes;
+drop policy if exists "classes_delete" on classes;
+create policy "classes_select" on classes for select using (academy_id = get_my_academy_id() or is_superadmin());
+create policy "classes_insert" on classes for insert with check (academy_id = get_my_academy_id() or is_superadmin());
+create policy "classes_update" on classes for update using (academy_id = get_my_academy_id() or is_superadmin());
+create policy "classes_delete" on classes for delete using (academy_id = get_my_academy_id() or is_superadmin());
+
+-- class_students
+drop policy if exists "class_students_select" on class_students;
+drop policy if exists "class_students_insert" on class_students;
+drop policy if exists "class_students_delete" on class_students;
+create policy "class_students_select" on class_students for select
+  using (is_superadmin() or class_id in (select id from classes where academy_id = get_my_academy_id()));
+create policy "class_students_insert" on class_students for insert
+  with check (is_superadmin() or class_id in (select id from classes where academy_id = get_my_academy_id()));
+create policy "class_students_delete" on class_students for delete
+  using (is_superadmin() or class_id in (select id from classes where academy_id = get_my_academy_id()));
+
+-- attendance
+drop policy if exists "attendance_select" on attendance;
+drop policy if exists "attendance_insert" on attendance;
+drop policy if exists "attendance_update" on attendance;
+create policy "attendance_select" on attendance for select using (academy_id = get_my_academy_id() or is_superadmin());
+create policy "attendance_insert" on attendance for insert with check (academy_id = get_my_academy_id() or is_superadmin());
+create policy "attendance_update" on attendance for update using (academy_id = get_my_academy_id() or is_superadmin());
+
+-- class_memos
+drop policy if exists "class_memos_select" on class_memos;
+drop policy if exists "class_memos_insert" on class_memos;
+drop policy if exists "class_memos_update" on class_memos;
+create policy "class_memos_select" on class_memos for select using (academy_id = get_my_academy_id() or is_superadmin());
+create policy "class_memos_insert" on class_memos for insert with check (academy_id = get_my_academy_id() or is_superadmin());
+create policy "class_memos_update" on class_memos for update using (academy_id = get_my_academy_id() or is_superadmin());
+
+-- test_scores
+drop policy if exists "test_scores_select" on test_scores;
+drop policy if exists "test_scores_insert" on test_scores;
+drop policy if exists "test_scores_update" on test_scores;
+create policy "test_scores_select" on test_scores for select using (academy_id = get_my_academy_id() or is_superadmin());
+create policy "test_scores_insert" on test_scores for insert with check (academy_id = get_my_academy_id() or is_superadmin());
+create policy "test_scores_update" on test_scores for update using (academy_id = get_my_academy_id() or is_superadmin());
+
+-- student_memos
+drop policy if exists "student_memos_select" on student_memos;
+drop policy if exists "student_memos_insert" on student_memos;
+drop policy if exists "student_memos_update" on student_memos;
+create policy "student_memos_select" on student_memos for select using (academy_id = get_my_academy_id() or is_superadmin());
+create policy "student_memos_insert" on student_memos for insert with check (academy_id = get_my_academy_id() or is_superadmin());
+create policy "student_memos_update" on student_memos for update using (academy_id = get_my_academy_id() or is_superadmin());
+
+-- student_tokens
+drop policy if exists "student_tokens_insert" on student_tokens;
+drop policy if exists "student_tokens_select" on student_tokens;
+create policy "student_tokens_select" on student_tokens for select using (true);
+create policy "student_tokens_insert" on student_tokens for insert with check (academy_id = get_my_academy_id() or is_superadmin());
+
+-- ============================================================
+-- 관리자 계정 생성 (auth.users에서 유저 UUID 확인 후 실행)
+-- academy_id는 null (특정 학원에 소속되지 않음)
+-- ============================================================
+-- insert into profiles (user_id, academy_id, role) values ('관리자_유저_UUID', null, 'superadmin');

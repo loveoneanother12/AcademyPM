@@ -10,8 +10,9 @@ import { renderAttendancePage } from './pages/attendance.js'
 import { renderResultsPage } from './pages/results.js'
 import { renderReportPage } from './pages/report.js'
 import { renderLoginPage } from './pages/login.js'
+import { renderAdminPage } from './pages/admin.js'
 import { supabase, isOnline } from './lib/supabase.js'
-import { clearAcademyIdCache, getMyAcademy } from './api.js'
+import { clearAcademyIdCache, getMyAcademy, getMyProfile, setAcademyIdOverride, setDemoMode } from './api.js'
 import { openModal, closeModal } from './components/modal.js'
 import { showToast } from './components/toast.js'
 
@@ -116,7 +117,15 @@ async function init() {
     settingsBtn.className = 'header-logout-btn'
     settingsBtn.title = '비밀번호 변경'
     settingsBtn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`
+    const DEMO_EMAIL = 'test@academypm.io'
+    const isDemo = session.user.email === DEMO_EMAIL
+    if (isDemo) setDemoMode(true)
+
     settingsBtn.onclick = () => {
+      if (session.user.email === DEMO_EMAIL) {
+        showToast('테스트 계정은 비밀번호를 변경할 수 없습니다', 'error')
+        return
+      }
       openModal(`
         <h2 class="modal-title">비밀번호 변경</h2>
         <div class="form-group">
@@ -162,14 +171,77 @@ async function init() {
     actions.prepend(logoutBtn)
     actions.prepend(settingsBtn)
 
-    // 헤더 로고 옆에 학원명 표시
+    // superadmin 체크
+    const profile = await getMyProfile()
+    if (profile?.role === 'superadmin') {
+      // 관리자 모드: 학원 목록 페이지 표시
+      document.getElementById('bottom-nav').style.display = 'none'
+      const content = document.getElementById('page-content')
+      content.style.paddingBottom = '0'
+
+      const enterAcademy = async (academyId, academyName) => {
+        setAcademyIdOverride(academyId)
+
+        // 헤더에 학원명 + 뒤로가기 버튼 표시
+        const logoWrap = document.querySelector('.header-logo')
+        logoWrap.querySelectorAll('.header-academy-name, .header-back-btn').forEach(el => el.remove())
+        const backBtn = document.createElement('button')
+        backBtn.className = 'header-back-btn'
+        backBtn.title = '학원 목록으로'
+        backBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`
+        backBtn.onclick = () => {
+          setAcademyIdOverride(null)
+          document.getElementById('bottom-nav').style.display = ''
+          content.style.paddingBottom = ''
+          logoWrap.querySelectorAll('.header-back-btn, .header-sub').forEach(el => el.remove())
+          document.getElementById('bottom-nav').style.display = 'none'
+          content.style.paddingBottom = '0'
+          renderAdminPage(content, enterAcademy)
+        }
+        const sub = document.createElement('div')
+        sub.className = 'header-sub'
+        sub.innerHTML = `
+          <span class="header-demo-badge">관리자</span>
+          <span class="header-academy-name">${academyName}</span>
+        `
+        logoWrap.appendChild(backBtn)
+        logoWrap.appendChild(sub)
+
+        // 일반 앱 로드
+        document.getElementById('bottom-nav').style.display = ''
+        content.style.paddingBottom = ''
+        document.querySelectorAll('.nav-item').forEach(btn => {
+          btn.addEventListener('click', () => navigateTo(btn.dataset.tab))
+        })
+        currentTab = null
+        await navigateTo('attendance')
+        document.querySelectorAll('.nav-item').forEach(el => {
+          el.classList.toggle('active', el.dataset.tab === 'attendance')
+        })
+      }
+
+      initTheme()
+      await renderAdminPage(content, enterAcademy)
+      return
+    }
+
+    // 헤더 로고 옆 서브 정보 표시 (일반 계정)
     getMyAcademy().then(name => {
-      if (!name) return
       const logoWrap = document.querySelector('.header-logo')
-      const tag = document.createElement('span')
-      tag.className = 'header-academy-name'
-      tag.textContent = name
-      logoWrap.appendChild(tag)
+      if (isDemo) {
+        const sub = document.createElement('div')
+        sub.className = 'header-sub'
+        sub.innerHTML = `
+          <span class="header-demo-badge">읽기 전용</span>
+          ${name ? `<span class="header-academy-name">${name}</span>` : ''}
+        `
+        logoWrap.appendChild(sub)
+      } else if (name) {
+        const tag = document.createElement('span')
+        tag.className = 'header-academy-name'
+        tag.textContent = name
+        logoWrap.appendChild(tag)
+      }
     })
   }
 

@@ -2885,6 +2885,26 @@ body {
   color: var(--text3);
 }
 
+/* 헤더 데모 서브 정보 (읽기전용 + 학원명 세로 스택) */
+.header-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-left: 6px;
+}
+
+/* 헤더 읽기 전용 뱃지 */
+.header-demo-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--yellow);
+  border: 1px solid var(--yellow);
+  border-radius: 4px;
+  padding: 1px 5px;
+  opacity: 0.8;
+  width: fit-content;
+}
+
 /* 헤더 로그아웃 버튼 */
 .header-logout-btn {
   background: none;
@@ -2994,4 +3014,107 @@ body {
   color: var(--text3);
   letter-spacing: 0.3px;
   text-transform: uppercase;
+}
+
+/* ── Admin Page ── */
+.admin-wrap {
+  padding: 20px 16px 32px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.admin-header {
+  margin-bottom: 20px;
+}
+
+.admin-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.admin-subtitle {
+  font-size: 13px;
+  color: var(--text3);
+  margin-top: 3px;
+}
+
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-academy-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+}
+
+.admin-academy-card:active {
+  background: var(--bg3);
+}
+
+.admin-academy-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-academy-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-academy-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-academy-meta {
+  font-size: 12px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+/* ── Header back button (superadmin) ── */
+.header-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.header-back-btn:active {
+  background: var(--bg3);
+  color: var(--text);
 }

@@ -51,7 +51,9 @@ let cachedAcademyId = null
 async function getMyAcademyId() {
   if (!isOnline) return null
   if (cachedAcademyId) return cachedAcademyId
-  const { data, error } = await supabase.from('profiles').select('academy_id').single()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return null
+  const { data, error } = await supabase.from('profiles').select('academy_id').eq('user_id', session.user.id).single()
   if (error) { console.error('[api.js] getMyAcademyId:', error); return null }
   cachedAcademyId = data?.academy_id
   return cachedAcademyId
@@ -59,6 +61,29 @@ async function getMyAcademyId() {
 
 export function clearAcademyIdCache() {
   cachedAcademyId = null
+}
+
+export function setAcademyIdOverride(id) {
+  cachedAcademyId = id
+}
+
+let demoMode = false
+export function setDemoMode(val) { demoMode = val }
+export function isDemoMode() { return demoMode }
+
+export async function getMyProfile() {
+  if (!isOnline) return null
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return null
+  const { data } = await supabase.from('profiles').select('role, academy_id').eq('user_id', session.user.id).single()
+  return data
+}
+
+export async function getAllAcademies() {
+  if (!isOnline) return []
+  const { data, error } = await supabase.from('academies').select('*').order('name')
+  if (error) handleError(error, 'getAllAcademies')
+  return data || []
 }
 
 export async function getMyAcademy() {
@@ -79,29 +104,29 @@ export async function getStudents() {
   if (!isOnline) {
     return JSON.parse(JSON.stringify(offlineStudents))
   }
-  const { data, error } = await supabase
-    .from('students')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const academyId = await getMyAcademyId()
+  let query = supabase.from('students').select('*')
+  if (academyId) query = query.eq('academy_id', academyId)
+  query = query.order('created_at', { ascending: false })
+  const { data, error } = await query
   if (error) handleError(error, 'getStudents')
   return data
 }
 
 export async function getClasses() {
   if (!isOnline) {
-    // 오프라인: students 배열 포함 반환
     const students = await getStudents()
     return offlineClasses.map(cls => ({
       ...cls,
       students: cls.students.map(sid => students.find(s => s.id === sid)).filter(Boolean),
     }))
   }
-  const { data, error } = await supabase
-    .from('classes')
-    .select('*, class_students(student_id, students(*))')
-    .order('created_at', { ascending: true })
+  const academyId = await getMyAcademyId()
+  let query = supabase.from('classes').select('*, class_students(student_id, students(*))')
+  if (academyId) query = query.eq('academy_id', academyId)
+  query = query.order('created_at', { ascending: true })
+  const { data, error } = await query
   if (error) handleError(error, 'getClasses')
-  // class_students join 결과를 students 배열로 정리
   return (data || []).map(cls => ({
     ...cls,
     students: (cls.class_students || []).map(cs => cs.students).filter(Boolean),
@@ -253,6 +278,7 @@ export async function getAllClassTestScores(classId) {
 // ========================================
 
 export async function insertRow(sheet, data) {
+  if (demoMode) return { ...data, id: 'demo' }
   if (!isOnline) {
     const row = { ...data, id: genId() }
     if (sheet === 'students') {
@@ -278,6 +304,7 @@ export async function insertRow(sheet, data) {
 }
 
 export async function updateRow(sheet, id, data) {
+  if (demoMode) return { id, ...data }
   if (!isOnline) {
     if (sheet === 'students') {
       const idx = offlineStudents.findIndex(r => r.id === id)
@@ -299,6 +326,7 @@ export async function updateRow(sheet, id, data) {
 }
 
 export async function deleteRow(sheet, id) {
+  if (demoMode) return true
   if (!isOnline) {
     if (sheet === 'students') {
       offlineStudents = offlineStudents.filter(r => r.id !== id)
@@ -350,6 +378,7 @@ export async function removeStudentFromClass(classId, studentId) {
 }
 
 export async function syncClassStudents(classId, studentIds) {
+  if (demoMode) return true
   if (!isOnline) {
     const cls = offlineClasses.find(c => c.id === classId)
     if (cls) cls.students = [...studentIds]
@@ -375,6 +404,7 @@ export async function syncClassStudents(classId, studentIds) {
 // ========================================
 
 export async function upsertAttendance(date, classId, studentId, data) {
+  if (demoMode) return true
   if (!isOnline) {
     const idx = offlineAttendance.findIndex(
       r => r.date === date && r.class_id === classId && r.student_id === studentId
@@ -398,6 +428,7 @@ export async function upsertAttendance(date, classId, studentId, data) {
 }
 
 export async function upsertClassMemo(date, classId, memo) {
+  if (demoMode) return true
   if (!isOnline) {
     const idx = offlineClassMemos.findIndex(r => r.date === date && r.class_id === classId)
     if (idx !== -1) {
@@ -419,6 +450,7 @@ export async function upsertClassMemo(date, classId, memo) {
 }
 
 export async function upsertTestScore(date, classId, studentId, score, testName = null, testSlot = 0) {
+  if (demoMode) return true
   if (!isOnline) {
     const idx = offlineTestScores.findIndex(
       r => r.date === date && r.class_id === classId && r.student_id === studentId && (r.test_slot ?? 0) === testSlot
@@ -447,6 +479,7 @@ export async function upsertTestScore(date, classId, studentId, score, testName 
 // ========================================
 
 export async function upsertStudentToken(studentId, token, expiresAt, dataFrom, dataTo) {
+  if (demoMode) return { token }
   if (!isOnline) return { token }
   const academy_id = await getMyAcademyId()
   const { error } = await supabase
@@ -514,6 +547,7 @@ export async function getStudentReportData(studentId, dataFrom, dataTo) {
 }
 
 export async function upsertStudentMemo(date, classId, studentId, memo) {
+  if (demoMode) return true
   if (!isOnline) {
     const idx = offlineStudentMemos.findIndex(
       r => r.date === date && r.class_id === classId && r.student_id === studentId
