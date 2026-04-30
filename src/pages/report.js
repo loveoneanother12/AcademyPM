@@ -3,41 +3,36 @@
  * ?report=TOKEN 으로 접근
  */
 
-import { getStudentToken, getStudentReportData } from '../api.js'
+import { getStudentReportByToken } from '../api.js'
 
 export async function renderReportPage(container, token) {
   container.innerHTML = `<div class="loading-screen"><div class="loading-spinner"></div></div>`
 
-  let tokenRecord
+  let result
   try {
-    tokenRecord = await getStudentToken(token)
+    result = await getStudentReportByToken(token)
   } catch (e) {
     renderError(container, '데이터를 불러오는 중 오류가 발생했습니다.')
     return
   }
 
-  if (!tokenRecord) {
+  if (!result || result.error === 'not_found') {
     renderError(container, '유효하지 않은 링크입니다.')
     return
   }
 
-  if (new Date(tokenRecord.expires_at) < new Date()) {
+  if (result.error === 'expired') {
     renderError(container, '링크가 만료되었습니다.\n담당 강사에게 새 링크를 요청하세요.')
     return
   }
 
-  const student = tokenRecord.students
-  const { data_from, data_to } = tokenRecord
-
-  let reportData
-  try {
-    reportData = await getStudentReportData(student.id, data_from, data_to)
-  } catch (e) {
-    renderError(container, '데이터를 불러오는 중 오류가 발생했습니다.')
-    return
-  }
-
-  const { attendance, testScores, memos, classes, pastClasses } = reportData
+  const student = result.student
+  const { data_from, data_to } = result.token
+  const attendance = result.attendance || []
+  const testScores = result.test_scores || []
+  const memos = result.memos || []
+  const classes = result.classes || []
+  const pastClasses = result.past_classes || []
 
   // 수업별 데이터 집계 헬퍼
   function buildClassStats(classList) {

@@ -45,6 +45,22 @@ function handleError(error, label) {
   throw error
 }
 
+// Academy ID 캐시 (로그인 세션 동안 유지)
+let cachedAcademyId = null
+
+async function getMyAcademyId() {
+  if (!isOnline) return null
+  if (cachedAcademyId) return cachedAcademyId
+  const { data, error } = await supabase.from('profiles').select('academy_id').single()
+  if (error) { console.error('[api.js] getMyAcademyId:', error); return null }
+  cachedAcademyId = data?.academy_id
+  return cachedAcademyId
+}
+
+export function clearAcademyIdCache() {
+  cachedAcademyId = null
+}
+
 // ========================================
 // 조회 함수
 // ========================================
@@ -234,7 +250,6 @@ export async function insertRow(sheet, data) {
     } else if (sheet === 'classes') {
       offlineClasses.push({ ...row, students: [] })
     } else if (sheet === 'class_students') {
-      // class_students는 별도 처리
       const cls = offlineClasses.find(c => c.id === data.class_id)
       if (cls && !cls.students.includes(data.student_id)) {
         cls.students.push(data.student_id)
@@ -242,9 +257,10 @@ export async function insertRow(sheet, data) {
     }
     return row
   }
+  const academy_id = await getMyAcademyId()
   const { data: result, error } = await supabase
     .from(sheet)
-    .insert(data)
+    .insert({ ...data, academy_id })
     .select()
     .single()
   if (error) handleError(error, `insertRow(${sheet})`)
@@ -360,10 +376,11 @@ export async function upsertAttendance(date, classId, studentId, data) {
     }
     return true
   }
+  const academy_id = await getMyAcademyId()
   const { error } = await supabase
     .from('attendance')
     .upsert(
-      { date, class_id: classId, student_id: studentId, ...data },
+      { date, class_id: classId, student_id: studentId, academy_id, ...data },
       { onConflict: 'date,class_id,student_id' }
     )
   if (error) handleError(error, 'upsertAttendance')
@@ -380,10 +397,11 @@ export async function upsertClassMemo(date, classId, memo) {
     }
     return true
   }
+  const academy_id = await getMyAcademyId()
   const { error } = await supabase
     .from('class_memos')
     .upsert(
-      { date, class_id: classId, memo },
+      { date, class_id: classId, memo, academy_id },
       { onConflict: 'date,class_id' }
     )
   if (error) handleError(error, 'upsertClassMemo')
@@ -403,10 +421,11 @@ export async function upsertTestScore(date, classId, studentId, score, testName 
     }
     return true
   }
+  const academy_id = await getMyAcademyId()
   const { error } = await supabase
     .from('test_scores')
     .upsert(
-      { date, class_id: classId, student_id: studentId, score, test_name: testName, test_slot: testSlot },
+      { date, class_id: classId, student_id: studentId, score, test_name: testName, test_slot: testSlot, academy_id },
       { onConflict: 'date,class_id,student_id,test_slot' }
     )
   if (error) handleError(error, 'upsertTestScore')
@@ -419,21 +438,19 @@ export async function upsertTestScore(date, classId, studentId, score, testName 
 
 export async function upsertStudentToken(studentId, token, expiresAt, dataFrom, dataTo) {
   if (!isOnline) return { token }
+  const academy_id = await getMyAcademyId()
   const { error } = await supabase
     .from('student_tokens')
-    .insert({ student_id: studentId, token, expires_at: expiresAt, data_from: dataFrom, data_to: dataTo })
+    .insert({ student_id: studentId, token, expires_at: expiresAt, data_from: dataFrom, data_to: dataTo, academy_id })
   if (error) handleError(error, 'upsertStudentToken')
   return { token }
 }
 
-export async function getStudentToken(token) {
+// 공유 리포트: 비로그인 상태에서 토큰으로 전체 데이터 조회 (SECURITY DEFINER RPC)
+export async function getStudentReportByToken(token) {
   if (!isOnline) return null
-  const { data, error } = await supabase
-    .from('student_tokens')
-    .select('*, students(*)')
-    .eq('token', token)
-    .maybeSingle()
-  if (error) handleError(error, 'getStudentToken')
+  const { data, error } = await supabase.rpc('get_student_report', { p_token: token })
+  if (error) handleError(error, 'getStudentReportByToken')
   return data
 }
 
@@ -498,10 +515,11 @@ export async function upsertStudentMemo(date, classId, studentId, memo) {
     }
     return true
   }
+  const academy_id = await getMyAcademyId()
   const { error } = await supabase
     .from('student_memos')
     .upsert(
-      { date, class_id: classId, student_id: studentId, memo },
+      { date, class_id: classId, student_id: studentId, memo, academy_id },
       { onConflict: 'date,class_id,student_id' }
     )
   if (error) handleError(error, 'upsertStudentMemo')

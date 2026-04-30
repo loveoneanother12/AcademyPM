@@ -2807,6 +2807,87 @@ body {
   --week-active-text: #1a1a1c;
 }
 
+/* === 로그인 페이지 === */
+.login-wrap {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  background: var(--bg);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 320px;
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.login-logo .logo-icon { font-size: 22px; color: var(--gold); }
+.login-logo .logo-text { font-size: 20px; font-weight: 700; color: var(--text); }
+
+.login-subtitle {
+  text-align: center;
+  color: var(--text2);
+  font-size: 13px;
+  margin-bottom: 28px;
+}
+
+.login-form { display: flex; flex-direction: column; }
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: var(--text3);
+  font-size: 12px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.login-google-btn {
+  width: 100%;
+  gap: 10px;
+  justify-content: center;
+}
+
+.login-notice {
+  text-align: center;
+  color: var(--text3);
+  font-size: 11px;
+  margin-top: 20px;
+}
+
+/* 헤더 로그아웃 버튼 */
+.header-logout-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text3);
+  padding: 4px 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  margin-right: 6px;
+  transition: color 0.15s;
+}
+
+.header-logout-btn:hover { color: var(--text2); }
+
 /* 라이트 모드 — accordion header active 배경 */
 [data-theme="light"] .accordion-header:active {
   background: var(--bg3);
