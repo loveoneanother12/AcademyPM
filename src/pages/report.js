@@ -27,7 +27,8 @@ export async function renderReportPage(container, token) {
   }
 
   const student = result.student
-  const { data_from, data_to } = result.token
+  const tokenRecord = result.token
+  const { data_from, data_to } = tokenRecord
   const attendance = result.attendance || []
   const testScores = result.test_scores || []
   const memos = result.memos || []

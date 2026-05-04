@@ -329,7 +329,15 @@ begin
 
   return json_build_object(
     'token',        row_to_json(v_token),
-    'student',      row_to_json(v_student),
+    'student',      json_build_object(
+                      'id',       v_student.id,
+                      'name',     v_student.name,
+                      'grade',    v_student.grade,
+                      'school',   v_student.school,
+                      'subjects', v_student.subjects,
+                      'gender',   v_student.gender,
+                      'status',   v_student.status
+                    ),
     'attendance',   coalesce(v_att, '[]'::json),
     'test_scores',  coalesce(v_scores, '[]'::json),
     'memos',        coalesce(v_memos, '[]'::json),
